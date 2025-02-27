@@ -163,6 +163,8 @@ pub fn get_config() -> Config {
     .expect("Cannot parse activity timeout");
 
     let ui_directory = get_ui_directory(matches.value_of("ui-directory"));
+    let forget_all = matches.is_present("forget-all");
+
 
     Config {
         interface,
