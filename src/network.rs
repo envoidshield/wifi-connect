@@ -585,3 +585,29 @@ fn is_access_point_connection(connection: &Connection) -> bool {
 fn is_wifi_connection(connection: &Connection) -> bool {
     connection.settings().kind == "802-11-wireless"
 }
+
+fn forget_all_wifi_connections(manager: &NetworkManager) -> Result<()> {
+    let connections = match manager.get_connections() {
+        Ok(connections) => connections,
+        Err(e) => {
+            error!("Getting existing connections failed: {}", e);
+            return Err(e.into());
+        }
+    };
+
+    info!("Forgetting all WiFi connections...");
+    
+    for connection in &connections {
+        if is_wifi_connection(connection) {
+            if let Some(ssid) = connection_ssid_as_str(connection) {
+                info!("Deleting WiFi connection: {}", ssid);
+                
+                if let Err(e) = connection.delete() {
+                    error!("Deleting WiFi connection failed: {}", e);
+                }
+            }
+        }
+    }
+    
+    Ok(())
+}

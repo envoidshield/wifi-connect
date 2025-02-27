@@ -23,6 +23,7 @@ pub struct Config {
     pub listening_port: u16,
     pub activity_timeout: u64,
     pub ui_directory: PathBuf,
+    pub forget_all: bool,
 }
 
 pub fn get_config() -> Config {
@@ -109,6 +110,12 @@ pub fn get_config() -> Config {
                 ))
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("forget-all")
+                .long("forget-all")
+                .help("Forget all saved WiFi networks and exit")
+                .takes_value(false),
+        )
         .get_matches();
 
     let interface: Option<String> = matches.value_of("portal-interface").map_or_else(
@@ -166,6 +173,7 @@ pub fn get_config() -> Config {
         listening_port,
         activity_timeout,
         ui_directory,
+        forget_all,
     }
 }
 

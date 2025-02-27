@@ -69,6 +69,13 @@ fn run() -> Result<()> {
 
     require_root()?;
 
+    if config.forget_all {
+        let manager = network_manager::NetworkManager::new();
+        network::forget_all_wifi_connections(&manager)?;
+        info!("All WiFi networks have been forgotten");
+        return Ok(());
+    }
+
     init_networking(&config)?;
 
     let (exit_tx, exit_rx) = channel();
