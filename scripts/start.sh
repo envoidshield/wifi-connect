@@ -92,8 +92,8 @@ check_connection
 connection=$? 
 
 if [ "$connection" -eq 0 ]; then
-    printf 'Skipping WiFi Connect\n'
-    sleep infinity
+    printf 'Starting API\n'
+    python3 api.py --binary "./wifi-connect" --serve --port 4444
 else
     printf 'Starting WiFi Connect\n'
     ./wifi-connect

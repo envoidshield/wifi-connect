@@ -29,8 +29,8 @@ pub enum NetworkCommand {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct Network {
-    ssid: String,
-    security: String,
+    pub ssid: String,
+    pub security: String,
 }
 
 pub enum NetworkCommandResponse {
@@ -268,7 +268,7 @@ impl NetworkCommandHandler {
     }
 }
 
-fn init_access_point_credentials(
+pub fn init_access_point_credentials(
     access_point: &AccessPoint,
     identity: &str,
     passphrase: &str,
@@ -352,12 +352,12 @@ fn find_wifi_managed_device(devices: Vec<Device>) -> Result<Option<Device>> {
     Ok(None)
 }
 
-fn get_access_points(device: &Device, ssid: &str) -> Result<Vec<AccessPoint>> {
-    get_access_points_impl(device,ssid).chain_err(|| ErrorKind::NoAccessPoints)
+pub fn get_access_points(device: &Device, ssid: &str) -> Result<Vec<AccessPoint>> {
+    get_access_points_impl(device, ssid).chain_err(|| ErrorKind::NoAccessPoints)
 }
 
 fn get_access_points_impl(device: &Device, ssid: &str) -> Result<Vec<AccessPoint>> {
-    info!("get_access_points_impl >>");
+    info!("Scanning for available networks...");
     let retries_allowed = 10;
     let mut retries = 0;
 
@@ -367,6 +367,7 @@ fn get_access_points_impl(device: &Device, ssid: &str) -> Result<Vec<AccessPoint
         let wifi_device = device.as_wifi_device().unwrap();
         let mut access_points = wifi_device.get_access_points()?;
 
+        // Only keep access points with valid SSIDs
         access_points.retain(|ap| ap.ssid().as_str().is_ok());
 
         // Purge access points with duplicate SSIDs
@@ -376,12 +377,15 @@ fn get_access_points_impl(device: &Device, ssid: &str) -> Result<Vec<AccessPoint
         // Remove access points without SSID (hidden)
         access_points.retain(|ap| !ap.ssid().as_str().unwrap().is_empty());
 
-        // Remove access points with the same SSID
-        access_points.retain(|ap| ap.ssid().as_str().unwrap() != ssid);
+        // Only filter by SSID if a specific SSID was provided
+        if !ssid.is_empty() {
+            access_points.retain(|ap| ap.ssid().as_str().unwrap() != ssid);
+        }
 
         if !access_points.is_empty() {
             info!(
-                "Access points: {:?}",
+                "Found {} access points: {:?}",
+                access_points.len(),
                 get_access_points_ssids(&access_points)
             );
             return Ok(access_points);
@@ -403,7 +407,7 @@ fn get_access_points_ssids(access_points: &[AccessPoint]) -> Vec<&str> {
         .collect()
 }
 
-fn get_networks(access_points: &[AccessPoint]) -> Vec<Network> {
+pub fn get_networks(access_points: &[AccessPoint]) -> Vec<Network> {
     access_points.iter().map(get_network_info).collect()
 }
 
@@ -428,7 +432,7 @@ fn get_network_security(access_point: &AccessPoint) -> &str {
     }
 }
 
-fn find_access_point<'a>(access_points: &'a [AccessPoint], ssid: &str) -> Option<&'a AccessPoint> {
+pub fn find_access_point<'a>(access_points: &'a [AccessPoint], ssid: &str) -> Option<&'a AccessPoint> {
     for access_point in access_points.iter() {
         if let Ok(access_point_ssid) = access_point.ssid().as_str() {
             if access_point_ssid == ssid {
@@ -473,7 +477,7 @@ fn stop_portal_impl(connection: &Connection, config: &Config) -> Result<()> {
     Ok(())
 }
 
-fn wait_for_connectivity(manager: &NetworkManager, timeout: u64) -> Result<bool> {
+pub fn wait_for_connectivity(manager: &NetworkManager, timeout: u64) -> Result<bool> {
     let mut total_time = 0;
 
     loop {
