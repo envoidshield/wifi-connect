@@ -24,6 +24,8 @@ pub struct Config {
     pub activity_timeout: u64,
     pub ui_directory: PathBuf,
     pub forget_all: bool,
+    pub list_networks: bool,
+    pub connect: Option<(String, String)>, // (SSID, passphrase)
 }
 
 pub fn get_config() -> Config {
@@ -116,6 +118,26 @@ pub fn get_config() -> Config {
                 .help("Forget all saved WiFi networks and exit")
                 .takes_value(false),
         )
+        .arg(
+            Arg::with_name("list-networks")
+                .long("list-networks")
+                .help("List all available WiFi networks and exit")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("connect")
+                .long("connect")
+                .value_name("ssid")
+                .help("Connect to a specific WiFi network")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("passphrase")
+                .long("passphrase")
+                .value_name("passphrase")
+                .help("Passphrase for the WiFi network to connect to")
+                .takes_value(true),
+        )
         .get_matches();
 
     let interface: Option<String> = matches.value_of("portal-interface").map_or_else(
@@ -164,7 +186,13 @@ pub fn get_config() -> Config {
 
     let ui_directory = get_ui_directory(matches.value_of("ui-directory"));
     let forget_all = matches.is_present("forget-all");
-
+    let list_networks = matches.is_present("list-networks");
+    let connect = if let Some(ssid) = matches.value_of("connect") {
+        let passphrase = matches.value_of("passphrase").unwrap_or("").to_string();
+        Some((ssid.to_string(), passphrase))
+    } else {
+        None
+    };
 
     Config {
         interface,
@@ -176,6 +204,8 @@ pub fn get_config() -> Config {
         activity_timeout,
         ui_directory,
         forget_all,
+        list_networks,
+        connect,
     }
 }
 

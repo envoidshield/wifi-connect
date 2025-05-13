@@ -38,6 +38,7 @@ use std::path;
 use std::process;
 use std::sync::mpsc::channel;
 use std::thread;
+use std::time::Duration;
 
 use config::get_config;
 use errors::*;
@@ -73,6 +74,70 @@ fn run() -> Result<()> {
         let manager = network_manager::NetworkManager::new();
         network::forget_all_wifi_connections(&manager)?;
         info!("All WiFi networks have been forgotten");
+        return Ok(());
+    }
+
+    if config.list_networks {
+        let manager = network_manager::NetworkManager::new();
+        let device = network::find_device(&manager, &config.interface)?;
+        
+        // Force a scan for networks
+        if let Some(wifi_device) = device.as_wifi_device() {
+            info!("Scanning for WiFi networks...");
+            if let Err(e) = wifi_device.request_scan() {
+                warn!("Failed to request scan: {}", e);
+            }
+            // Wait a bit for the scan to complete
+            thread::sleep(Duration::from_secs(2));
+        }
+        
+        let access_points = network::get_access_points(&device, "")?;
+        let networks = network::get_networks(&access_points);
+        
+        println!("\nAvailable WiFi Networks:");
+        println!("----------------------");
+        if networks.is_empty() {
+            println!("No networks found. Please try again.");
+        } else {
+            for network in networks {
+                println!("SSID: {}, Security: {}", network.ssid, network.security);
+            }
+        }
+        return Ok(());
+    }
+
+    if let Some((ssid, passphrase)) = config.connect {
+        let manager = network_manager::NetworkManager::new();
+        let device = network::find_device(&manager, &config.interface)?;
+        let access_points = network::get_access_points(&device, "")?;
+        
+        if let Some(access_point) = network::find_access_point(&access_points, &ssid) {
+            let wifi_device = device.as_wifi_device().unwrap();
+            let credentials = network::init_access_point_credentials(access_point, "", &passphrase);
+            
+            info!("Connecting to '{}'...", ssid);
+            match wifi_device.connect(access_point, &credentials) {
+                Ok((connection, state)) => {
+                    if state == network_manager::ConnectionState::Activated {
+                        match network::wait_for_connectivity(&manager, 20) {
+                            Ok(has_connectivity) => {
+                                if has_connectivity {
+                                    info!("Successfully connected to '{}'", ssid);
+                                } else {
+                                    warn!("Connected to '{}' but no internet connectivity", ssid);
+                                }
+                            }
+                            Err(err) => error!("Getting Internet connectivity failed: {}", err),
+                        }
+                    } else {
+                        warn!("Failed to connect to '{}': {:?}", ssid, state);
+                    }
+                }
+                Err(e) => error!("Error connecting to '{}': {}", ssid, e),
+            }
+        } else {
+            error!("Network '{}' not found", ssid);
+        }
         return Ok(());
     }
 
