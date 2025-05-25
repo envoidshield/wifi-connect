@@ -24,7 +24,6 @@ pub struct Config {
     pub activity_timeout: u64,
     pub ui_directory: PathBuf,
     pub forget_all: bool,
-    pub wifi_direct: bool,
 }
 
 pub fn get_config() -> Config {
@@ -117,12 +116,6 @@ pub fn get_config() -> Config {
                 .help("Forget all saved WiFi networks and exit")
                 .takes_value(false),
         )
-        .arg(
-            Arg::with_name("wifi-direct")
-                .long("wifi-direct")
-                .help("Enable WiFi Direct (P2P) mode instead of traditional access point")
-                .takes_value(false),
-        )
         .get_matches();
 
     let interface: Option<String> = matches.value_of("portal-interface").map_or_else(
@@ -171,8 +164,6 @@ pub fn get_config() -> Config {
 
     let ui_directory = get_ui_directory(matches.value_of("ui-directory"));
     let forget_all = matches.is_present("forget-all");
-    let wifi_direct = matches.is_present("wifi-direct") || 
-        env::var("WIFI_DIRECT").unwrap_or_else(|_| "false".to_string()).to_lowercase() == "true";
 
 
     Config {
@@ -185,7 +176,6 @@ pub fn get_config() -> Config {
         activity_timeout,
         ui_directory,
         forget_all,
-        wifi_direct,
     }
 }
 

@@ -4,8 +4,6 @@
 
 WiFi Connect is a utility for dynamically setting the WiFi configuration on a Linux device via a captive portal. WiFi credentials are specified by connecting with a mobile phone or laptop to the access point that WiFi Connect creates.
 
-**New in v4.11.53**: WiFi Direct (P2P) support for better mobile device compatibility, similar to Apple CarPlay and Android Auto connections.
-
 [![Current Release](https://img.shields.io/github/release/balena-io/wifi-connect.svg?style=flat-square)](https://github.com/balena-io/wifi-connect/releases/latest)
 [![CircleCI status](https://img.shields.io/circleci/project/github/balena-io/wifi-connect.svg?style=flat-square)](https://circleci.com/gh/balena-io/wifi-connect)
 [![License](https://img.shields.io/github/license/balena-io/wifi-connect.svg?style=flat-square)](https://github.com/balena-io/wifi-connect/blob/master/LICENSE)
@@ -54,22 +52,6 @@ When the network credentials have been entered, WiFi Connect will disable the ac
 For a complete list of command line arguments and environment variables check out our [command line arguments](./docs/command-line-arguments.md) guide.
 
 The full application flow is illustrated in the [state flow diagram](./docs/state-flow-diagram.md).
-
-## WiFi Direct Support
-
-WiFi Connect now supports WiFi Direct (P2P) mode for better compatibility with mobile devices:
-
-```bash
-wifi-connect --wifi-direct
-```
-
-WiFi Direct provides several advantages:
-- Mobile devices can maintain their cellular/WiFi connection while connecting
-- Faster device discovery and connection
-- Industry standard used by Apple CarPlay and Android Auto
-- Better compatibility with modern smartphones
-
-For detailed information, see the [WiFi Direct documentation](./docs/wifi-direct.md).
 
 ***
 

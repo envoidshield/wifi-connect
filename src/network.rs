@@ -15,7 +15,6 @@ use dnsmasq::{start_dnsmasq, stop_dnsmasq};
 use errors::*;
 use exit::{exit, trap_exit_signals, ExitResult};
 use server::start_server;
-use wifi_direct::WiFiDirectManager;
 
 pub enum NetworkCommand {
     Activate,
@@ -48,7 +47,6 @@ struct NetworkCommandHandler {
     server_tx: Sender<NetworkCommandResponse>,
     network_rx: Receiver<NetworkCommand>,
     activated: bool,
-    wifi_direct_manager: WiFiDirectManager,
 }
 
 impl NetworkCommandHandler {
@@ -77,11 +75,6 @@ impl NetworkCommandHandler {
         let config = config.clone();
         let activated = false;
 
-        let wifi_direct_manager = WiFiDirectManager::new(
-            device.interface().to_string(),
-            &config
-        );
-
         Ok(NetworkCommandHandler {
             manager,
             device,
@@ -92,7 +85,6 @@ impl NetworkCommandHandler {
             server_tx,
             network_rx,
             activated,
-            wifi_direct_manager,
         })
     }
 
@@ -449,31 +441,8 @@ fn find_access_point<'a>(access_points: &'a [AccessPoint], ssid: &str) -> Option
 }
 
 fn create_portal(device: &Device, config: &Config) -> Result<Connection> {
-    if config.wifi_direct {
-        create_wifi_direct_portal(device, config)
-    } else {
-        let portal_passphrase = config.passphrase.as_ref().map(|p| p as &str);
-        create_portal_impl(device, &config.ssid, &config.gateway, &portal_passphrase)
-            .chain_err(|| ErrorKind::CreateCaptivePortal)
-    }
-}
-
-fn create_wifi_direct_portal(device: &Device, config: &Config) -> Result<Connection> {
-    info!("Creating WiFi Direct (P2P) portal...");
-    
-    let wifi_direct_manager = WiFiDirectManager::new(
-        device.interface().to_string(),
-        config
-    );
-    
-    wifi_direct_manager.start_wifi_direct_group()
-        .chain_err(|| ErrorKind::CreateCaptivePortal)?;
-    
-    // For WiFi Direct, we don't have a traditional NetworkManager connection
-    // We'll need to create a dummy connection or modify the architecture
-    // For now, let's create a traditional hotspot as fallback
-    warn!("WiFi Direct portal created, falling back to traditional connection handling");
     let portal_passphrase = config.passphrase.as_ref().map(|p| p as &str);
+
     create_portal_impl(device, &config.ssid, &config.gateway, &portal_passphrase)
         .chain_err(|| ErrorKind::CreateCaptivePortal)
 }

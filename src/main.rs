@@ -32,7 +32,6 @@ mod logger;
 mod network;
 mod privileges;
 mod server;
-mod wifi_direct;
 
 use std::io::Write;
 use std::path;

@@ -59,13 +59,3 @@ Command line options have environment variable counterpart. If both a command li
     Web UI directory location
 
     Default: _ui_
-
-*   **--forget-all**
-
-    Forget all saved WiFi networks and exit
-
-*   **--wifi-direct**
-
-    Enable WiFi Direct (P2P) mode instead of traditional access point. Provides better compatibility with mobile devices and allows them to maintain their cellular/WiFi connection while connecting to the setup portal.
-
-## Environment Variables

@@ -96,7 +96,6 @@ if [ "$connection" -eq 0 ]; then
     sleep infinity
 else
     printf 'Starting WiFi Connect\n'
-    # Use WiFi Direct mode for better compatibility with mobile devices
-    ./wifi-connect --wifi-direct
+    ./wifi-connect
 fi
 
