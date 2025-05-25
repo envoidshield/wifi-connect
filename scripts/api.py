@@ -86,13 +86,27 @@ class WiFiHandler(BaseHTTPRequestHandler):
         self.end_headers()
     
     def do_GET(self):
-        if self.path == '/list-networks':
+        if self.path == '/':
+            # Serve the main HTML file
+            try:
+                with open('index.html', 'rb') as f:
+                    content = f.read()
+                self.send_response(200)
+                self.send_header('Content-type', 'text/html')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(content)
+            except FileNotFoundError:
+                self._set_headers(404)
+                self.wfile.write(json.dumps({"error": "index.html not found"}).encode())
+        elif self.path == '/list-networks':
             networks = self.wifi_manager.list_networks()
             self._set_headers()
             self.wfile.write(json.dumps({"networks": networks}).encode())
         else:
             self._set_headers(404)
             self.wfile.write(json.dumps({"error": "Not found"}).encode())
+
     
     def do_POST(self):
         content_length = int(self.headers['Content-Length'])
