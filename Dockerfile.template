@@ -27,6 +27,7 @@ RUN cargo build --release --verbose
 # Stage 2: Runner
 FROM balenalib/$BALENA_ARCH-debian
 
+RUN apt-get update && apt-get upgrade -y
 RUN install_packages dnsmasq wireless-tools
 RUN apt-get install python3
 
