@@ -33,6 +33,22 @@ pub struct Network {
     pub security: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct SavedNetwork {
+    pub ssid: String,
+    pub security: String,
+    pub auto_connect: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct ConnectedNetwork {
+    pub ssid: String,
+    pub security: String,
+    pub signal_strength: u8,
+    pub interface: String,
+    pub ip_address: Option<String>,
+}
+
 pub enum NetworkCommandResponse {
     Networks(Vec<Network>),
 }
@@ -442,6 +458,137 @@ pub fn find_access_point<'a>(access_points: &'a [AccessPoint], ssid: &str) -> Op
     }
 
     None
+}
+
+// New function to get currently connected network
+pub fn get_connected_network(manager: &NetworkManager, interface: &Option<String>) -> Result<Option<ConnectedNetwork>> {
+    let device = find_device(manager, interface)?;
+    
+    // Check if device is connected
+    if device.get_state()? != DeviceState::Activated {
+        return Ok(None);
+    }
+
+    let active_connection = match device.get_active_connection() {
+        Ok(Some(conn)) => conn,
+        Ok(None) => return Ok(None),
+        Err(e) => {
+            warn!("Failed to get active connection: {}", e);
+            return Ok(None);
+        }
+    };
+
+    // Get connection settings
+    let connection = active_connection.connection();
+    let settings = connection.settings();
+    
+    if settings.kind != "802-11-wireless" {
+        return Ok(None);
+    }
+
+    let ssid = match settings.ssid.as_str() {
+        Ok(ssid) => ssid.to_string(),
+        Err(_) => return Ok(None),
+    };
+
+    // Try to get signal strength from access points
+    let wifi_device = device.as_wifi_device().unwrap();
+    let mut signal_strength = 0u8;
+    
+    if let Ok(access_points) = wifi_device.get_access_points() {
+        if let Some(ap) = find_access_point(&access_points, &ssid) {
+            signal_strength = ap.strength();
+        }
+    }
+
+    // Get IP address
+    let ip_address = match device.get_ip4_config() {
+        Ok(Some(ip_config)) => {
+            match ip_config.addresses().first() {
+                Some(addr) => Some(addr.address().to_string()),
+                None => None,
+            }
+        },
+        _ => None,
+    };
+
+    // Determine security type
+    let security = if settings.security.contains("wpa2") || settings.security.contains("wpa3") {
+        "wpa"
+    } else if settings.security.contains("wep") {
+        "wep"
+    } else if settings.security.contains("enterprise") {
+        "enterprise"
+    } else {
+        "none"
+    };
+
+    Ok(Some(ConnectedNetwork {
+        ssid,
+        security: security.to_string(),
+        signal_strength,
+        interface: device.interface().to_string(),
+        ip_address,
+    }))
+}
+
+// New function to list all saved networks
+pub fn get_saved_networks(manager: &NetworkManager) -> Result<Vec<SavedNetwork>> {
+    let connections = manager.get_connections()?;
+    let mut saved_networks = Vec::new();
+
+    for connection in &connections {
+        if is_wifi_connection(connection) && !is_access_point_connection(connection) {
+            let settings = connection.settings();
+            
+            if let Ok(ssid) = settings.ssid.as_str() {
+                if !ssid.is_empty() {
+                    let security = if settings.security.contains("wpa2") || settings.security.contains("wpa3") {
+                        "wpa"
+                    } else if settings.security.contains("wep") {
+                        "wep"
+                    } else if settings.security.contains("enterprise") {
+                        "enterprise"
+                    } else {
+                        "none"
+                    };
+
+                    saved_networks.push(SavedNetwork {
+                        ssid: ssid.to_string(),
+                        security: security.to_string(),
+                        auto_connect: settings.autoconnect,
+                    });
+                }
+            }
+        }
+    }
+
+    saved_networks.sort_by(|a, b| a.ssid.cmp(&b.ssid));
+    Ok(saved_networks)
+}
+
+// New function to forget a specific network
+pub fn forget_specific_network(manager: &NetworkManager, ssid: &str) -> Result<bool> {
+    let connections = manager.get_connections()?;
+    let mut found = false;
+
+    for connection in &connections {
+        if is_wifi_connection(connection) && !is_access_point_connection(connection) {
+            if let Some(connection_ssid) = connection_ssid_as_str(connection) {
+                if connection_ssid == ssid {
+                    info!("Forgetting WiFi network: {}", ssid);
+                    connection.delete().chain_err(|| ErrorKind::DeleteAccessPoint)?;
+                    found = true;
+                }
+            }
+        }
+    }
+
+    if !found {
+        warn!("Network '{}' not found in saved connections", ssid);
+    }
+
+    Ok(found)
 }
 
 fn create_portal(device: &Device, config: &Config) -> Result<Connection> {

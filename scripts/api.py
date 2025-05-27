@@ -49,6 +49,100 @@ class WiFiConnectWrapper:
             print(f"Error output: {e.stderr}", file=sys.stderr)
             return []
     
+    def list_connected(self):
+        """List currently connected WiFi network using the binary"""
+        try:
+            result = subprocess.run(
+                [self.binary_path, "--list-connected"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            
+            # Parse the output to extract connected network info
+            output = result.stdout
+            
+            if "Connected Network:" in output:
+                # Extract the connected network section
+                connected_section = output.split("Connected Network:")[1]
+                
+                # Parse the connected network information
+                # Expected format: SSID: <name>, Security: <type>, Signal: <strength>%, Interface: <interface>, IP: <ip_address>
+                ssid_match = re.search(r'SSID: (.*?)(?:,|$)', connected_section)
+                security_match = re.search(r'Security: (.*?)(?:,|$)', connected_section)
+                signal_match = re.search(r'Signal: (\d+)%', connected_section)
+                interface_match = re.search(r'Interface: (.*?)(?:,|$)', connected_section)
+                ip_match = re.search(r'IP: (.*?)(?:,|$)', connected_section)
+                
+                if ssid_match:
+                    return {
+                        "ssid": ssid_match.group(1).strip(),
+                        "security": security_match.group(1).strip() if security_match else "unknown",
+                        "signal_strength": int(signal_match.group(1)) if signal_match else 0,
+                        "interface": interface_match.group(1).strip() if interface_match else "unknown",
+                        "ip_address": ip_match.group(1).strip() if ip_match else None
+                    }
+            elif "No network connected" in output or "Not connected" in output:
+                return None
+            
+            return None
+        except subprocess.CalledProcessError as e:
+            print(f"Error listing connected network: {e}", file=sys.stderr)
+            print(f"Error output: {e.stderr}", file=sys.stderr)
+            return None
+    
+    def list_saved(self):
+        """List all saved WiFi networks using the binary"""
+        try:
+            result = subprocess.run(
+                [self.binary_path, "--list-saved"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            
+            # Parse the output based on the actual format
+            networks = []
+            output = result.stdout
+            
+            # Check if the expected section exists
+            if "Saved WiFi Networks:" in output:
+                # Extract the saved networks section
+                networks_section = output.split("Saved WiFi Networks:")[1]
+                
+                # Parse each saved network entry
+                # Expected format: "SSID: <name>, Security: <type>, Auto-connect: <true/false>"
+                network_pattern = re.compile(r'SSID: (.*?), Security: (.*?), Auto-connect: (.*?)$', re.MULTILINE)
+                matches = network_pattern.findall(networks_section)
+                
+                for ssid, security, auto_connect in matches:
+                    networks.append({
+                        "ssid": ssid.strip(),
+                        "security": security.strip(),
+                        "auto_connect": auto_connect.strip().lower() == "true"
+                    })
+            elif "No saved networks found" in output:
+                return []
+            
+            return networks
+        except subprocess.CalledProcessError as e:
+            print(f"Error listing saved networks: {e}", file=sys.stderr)
+            print(f"Error output: {e.stderr}", file=sys.stderr)
+            return []
+    
+    def forget_network(self, ssid):
+        """Forget a specific WiFi network using the binary"""
+        try:
+            subprocess.run(
+                [self.binary_path, "--forget-network", ssid],
+                check=True
+            )
+            return True
+        except subprocess.CalledProcessError as e:
+            print(f"Error forgetting network '{ssid}': {e}", file=sys.stderr)
+            print(f"Error output: {e.stderr if hasattr(e, 'stderr') else ''}", file=sys.stderr)
+            return False
+    
     def forget_all(self):
         """Forget all saved WiFi networks using the binary"""
         try:
@@ -103,6 +197,14 @@ class WiFiHandler(BaseHTTPRequestHandler):
             networks = self.wifi_manager.list_networks()
             self._set_headers()
             self.wfile.write(json.dumps({"networks": networks}).encode())
+        elif self.path == '/list-connected':
+            connected = self.wifi_manager.list_connected()
+            self._set_headers()
+            self.wfile.write(json.dumps({"connected": connected}).encode())
+        elif self.path == '/list-saved':
+            saved_networks = self.wifi_manager.list_saved()
+            self._set_headers()
+            self.wfile.write(json.dumps({"saved_networks": saved_networks}).encode())
         else:
             self._set_headers(404)
             self.wfile.write(json.dumps({"error": "Not found"}).encode())
@@ -117,6 +219,17 @@ class WiFiHandler(BaseHTTPRequestHandler):
             
             if self.path == '/forget-all':
                 success = self.wifi_manager.forget_all()
+                self._set_headers()
+                self.wfile.write(json.dumps({"success": success}).encode())
+            
+            elif self.path == '/forget-network':
+                if 'ssid' not in data:
+                    self._set_headers(400)
+                    self.wfile.write(json.dumps({"error": "SSID is required"}).encode())
+                    return
+                
+                ssid = data['ssid']
+                success = self.wifi_manager.forget_network(ssid)
                 self._set_headers()
                 self.wfile.write(json.dumps({"success": success}).encode())
             
@@ -164,6 +277,9 @@ def main():
     parser.add_argument('--binary', default='wifi-connect', help='Path to the wifi-connect binary (default: wifi-connect)')
     parser.add_argument('--forget-all', action='store_true', help='Forget all saved WiFi networks and exit')
     parser.add_argument('--list-networks', action='store_true', help='List all available WiFi networks and exit')
+    parser.add_argument('--list-connected', action='store_true', help='List currently connected WiFi network and exit')
+    parser.add_argument('--list-saved', action='store_true', help='List all saved WiFi networks and exit')
+    parser.add_argument('--forget-network', metavar='ssid', help='Forget a specific WiFi network by SSID and exit')
     parser.add_argument('--connect', metavar='ssid', help='Connect to a specific WiFi network')
     parser.add_argument('--passphrase', metavar='passphrase', help='Passphrase for the WiFi network to connect to')
     parser.add_argument('--serve', action='store_true', help='Run as a microserver')
@@ -177,8 +293,43 @@ def main():
     if args.list_networks:
         networks = wifi_manager.list_networks()
         print("Available WiFi networks:")
-        for idx, network in enumerate(networks, 1):
-            print(f"{idx}. {network['ssid']} (Security: {network['security']})")
+        if networks:
+            for idx, network in enumerate(networks, 1):
+                print(f"{idx}. {network['ssid']} (Security: {network['security']})")
+        else:
+            print("No networks found.")
+        sys.exit(0)
+    
+    if args.list_connected:
+        connected = wifi_manager.list_connected()
+        if connected:
+            print("Currently connected network:")
+            print(f"SSID: {connected['ssid']}")
+            print(f"Security: {connected['security']}")
+            print(f"Signal Strength: {connected['signal_strength']}%")
+            print(f"Interface: {connected['interface']}")
+            if connected['ip_address']:
+                print(f"IP Address: {connected['ip_address']}")
+        else:
+            print("No network currently connected.")
+        sys.exit(0)
+    
+    if args.list_saved:
+        saved_networks = wifi_manager.list_saved()
+        print("Saved WiFi networks:")
+        if saved_networks:
+            for idx, network in enumerate(saved_networks, 1):
+                auto_connect_str = "Yes" if network['auto_connect'] else "No"
+                print(f"{idx}. {network['ssid']} (Security: {network['security']}, Auto-connect: {auto_connect_str})")
+        else:
+            print("No saved networks found.")
+        sys.exit(0)
+    
+    if args.forget_network:
+        if wifi_manager.forget_network(args.forget_network):
+            print(f"Successfully forgot network '{args.forget_network}'.")
+        else:
+            print(f"Failed to forget network '{args.forget_network}'.")
         sys.exit(0)
     
     if args.forget_all:
@@ -196,7 +347,8 @@ def main():
         sys.exit(0)
     
     # Run as a server if no other operations are specified or --serve is used
-    if args.serve or (not args.list_networks and not args.forget_all and not args.connect):
+    if args.serve or (not any([args.list_networks, args.list_connected, args.list_saved, 
+                              args.forget_all, args.forget_network, args.connect])):
         try:
             run_server(port=args.port, wifi_manager=wifi_manager)
         except KeyboardInterrupt:

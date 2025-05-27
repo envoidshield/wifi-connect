@@ -62,6 +62,7 @@ COPY --from=builder /myapp/target/release/wifi-connect .
 COPY scripts/start.sh .
 COPY scripts/api.py .
 COPY ui/build ui
+COPY index.html .
 COPY ui/build/index.html ui/index
 
 CMD ["bash", "start.sh"]

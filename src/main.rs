@@ -57,7 +57,7 @@ fn main() {
             writeln!(stderr, "  caused by: {}", inner).expect(errmsg);
         }
 
-        process::exit(exit_code(e));
+        process::exit(errors::exit_code(e));
     }
 }
 
@@ -74,6 +74,17 @@ fn run() -> Result<()> {
         let manager = network_manager::NetworkManager::new();
         network::forget_all_wifi_connections(&manager)?;
         info!("All WiFi networks have been forgotten");
+        return Ok(());
+    }
+
+    if let Some(ref ssid) = config.forget_network {
+        let manager = network_manager::NetworkManager::new();
+        let found = network::forget_specific_network(&manager, ssid)?;
+        if found {
+            info!("WiFi network '{}' has been forgotten", ssid);
+        } else {
+            info!("WiFi network '{}' was not found in saved connections", ssid);
+        }
         return Ok(());
     }
 
@@ -101,6 +112,48 @@ fn run() -> Result<()> {
         } else {
             for network in networks {
                 println!("SSID: {}, Security: {}", network.ssid, network.security);
+            }
+        }
+        return Ok(());
+    }
+
+    if config.list_connected {
+        let manager = network_manager::NetworkManager::new();
+        
+        match network::get_connected_network(&manager, &config.interface)? {
+            Some(connected) => {
+                println!("\nConnected Network:");
+                println!("-----------------");
+                println!("SSID: {}", connected.ssid);
+                println!("Security: {}", connected.security);
+                println!("Signal: {}%", connected.signal_strength);
+                println!("Interface: {}", connected.interface);
+                if let Some(ip) = connected.ip_address {
+                    println!("IP: {}", ip);
+                } else {
+                    println!("IP: Not available");
+                }
+            }
+            None => {
+                println!("\nNo network connected");
+            }
+        }
+        return Ok(());
+    }
+
+    if config.list_saved {
+        let manager = network_manager::NetworkManager::new();
+        let saved_networks = network::get_saved_networks(&manager)?;
+        
+        println!("\nSaved WiFi Networks:");
+        println!("-------------------");
+        if saved_networks.is_empty() {
+            println!("No saved networks found.");
+        } else {
+            for network in saved_networks {
+                let auto_connect_str = if network.auto_connect { "Yes" } else { "No" };
+                println!("SSID: {}, Security: {}, Auto-connect: {}", 
+                         network.ssid, network.security, auto_connect_str);
             }
         }
         return Ok(());

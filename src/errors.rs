@@ -107,6 +107,11 @@ error_chain! {
             description("Root privileges required")
             display("You need root privileges to run {}", app)
         }
+        
+        NetworkNotFound(ssid: String) {
+            description("Network not found")
+            display("Network not found: {}", ssid)
+        }
     }
 }
 
