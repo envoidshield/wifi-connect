@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 import argparse
+import os
 import subprocess
 import sys
 import json
 import re
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
+import mimetypes
 
 class WiFiConnectWrapper:
     def __init__(self, binary_path="wifi-connect"):
@@ -216,6 +218,22 @@ class WiFiHandler(BaseHTTPRequestHandler):
             saved_networks = self.wifi_manager.list_saved()
             self._set_headers()
             self.wfile.write(json.dumps({"saved_networks": saved_networks}).encode())
+        elif self.path.startswith('/static/ui/public/static'):
+            file_path = self.path.lstrip('/')
+            fs_path = os.path.join('ui', 'public', file_path[len('static/'):])  # maps /static/... to ui/public/...
+            
+            if os.path.exists(fs_path) and os.path.isfile(fs_path):
+                mime_type, _ = mimetypes.guess_type(fs_path)
+                self.send_response(200)
+                self.send_header('Content-type', mime_type or 'application/octet-stream')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                with open(fs_path, 'rb') as f:
+                    self.wfile.write(f.read())
+            else:
+                self._set_headers(404)
+                self.wfile.write(json.dumps({"error": "File not found"}).encode())
+
         else:
             self._set_headers(404)
             self.wfile.write(json.dumps({"error": "Not found"}).encode())
