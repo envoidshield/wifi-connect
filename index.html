@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WiFi Manager</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+            padding: 10px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            font-weight: 300;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1rem;
+        }
+
+        .tabs {
+            display: flex;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .tab {
+            flex: 1;
+            min-width: 120px;
+            padding: 1rem;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 0.9rem;
+            color: #6c757d;
+            transition: all 0.3s ease;
+            position: relative;
+            white-space: nowrap;
+            text-align: center;
+        }
+
+        .tab:hover {
+            background: #e9ecef;
+            color: #495057;
+        }
+
+        .tab.active {
+            background: white;
+            color: #667eea;
+        }
+
+        .tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+            padding: 1rem;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .controls {
+            display: flex;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            flex: 1;
+            justify-content: center;
+            min-height: 44px; /* iOS recommended touch target size */
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a6fd8;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102,126,234,0.3);
+        }
+
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c0392b;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(231,76,60,0.3);
+        }
+
+        .btn-success {
+            background: #27ae60;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #229954;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(39,174,96,0.3);
+        }
+
+        .network-list {
+            list-style: none;
+        }
+
+        .network-item {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            padding: 1.25rem;
+            margin-bottom: 0.75rem;
+            background: #f8f9fa;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border: 2px solid transparent;
+        }
+
+        .network-item:hover {
+            background: #e9ecef;
+            border-color: #667eea;
+        }
+
+        .network-item.connected {
+            background: #d1ecf1;
+            border-color: #17a2b8;
+        }
+
+        .network-info {
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+        }
+
+        .network-name {
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .network-details {
+            font-size: 0.9rem;
+            color: #6c757d;
+            line-height: 1.4;
+        }
+
+        .network-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .network-actions .btn {
+            flex: 1;
+            min-width: 100px;
+        }
+
+        .badge {
+            padding: 0.4rem 0.75rem;
+            border-radius: 16px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .badge-success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .badge-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .badge-info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 15px;
+            padding: 1.5rem;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .modal-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #6c757d;
+            padding: 0.5rem;
+            margin: -0.5rem;
+            min-height: 44px;
+            min-width: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 1rem;
+            border: 2px solid #ced4da;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+            margin-top: 2rem;
+        }
+
+        .form-actions .btn {
+            flex: 1;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: #6c757d;
+        }
+
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            color: #dee2e6;
+        }
+
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            z-index: 2000;
+            transform: translateY(100px);
+            transition: transform 0.3s ease;
+            text-align: center;
+        }
+
+        .toast.show {
+            transform: translateY(0);
+        }
+
+        .toast.success {
+            background: #27ae60;
+        }
+
+        .toast.error {
+            background: #e74c3c;
+        }
+
+        /* Mobile-specific improvements */
+        @media (max-width: 768px) {
+            body {
+                padding: 5px;
+            }
+            
+            .container {
+                border-radius: 12px;
+                margin: 0;
+            }
+            
+            .header {
+                padding: 1.25rem 1rem;
+            }
+            
+            .header h1 {
+                font-size: 1.75rem;
+            }
+            
+            .tab {
+                padding: 0.875rem 0.5rem;
+                font-size: 0.85rem;
+            }
+            
+            .tab-content {
+                padding: 1rem;
+            }
+            
+            .controls {
+                gap: 0.5rem;
+                margin-bottom: 1rem;
+            }
+            
+            .btn {
+                padding: 0.875rem 0.75rem;
+                font-size: 0.8rem;
+                min-height: 48px;
+            }
+            
+            .network-item {
+                padding: 1rem;
+                margin-bottom: 0.5rem;
+                border-radius: 10px;
+            }
+            
+            .network-name {
+                font-size: 1rem;
+            }
+            
+            .network-details {
+                font-size: 0.85rem;
+            }
+            
+            .network-actions {
+                gap: 0.5rem;
+            }
+            
+            .network-actions .btn {
+                min-width: 80px;
+                padding: 0.5rem 0.75rem;
+                font-size: 0.8rem;
+            }
+            
+            .modal-content {
+                padding: 1.25rem;
+                border-radius: 12px;
+            }
+            
+            .form-control {
+                padding: 0.875rem;
+                font-size: 16px; /* Prevents zoom on iOS */
+            }
+            
+            .toast {
+                bottom: 10px;
+                left: 10px;
+                right: 10px;
+                font-size: 0.9rem;
+            }
+        }
+
+        /* Extra small screens */
+        @media (max-width: 480px) {
+            .header h1 {
+                font-size: 1.5rem;
+            }
+            
+            .header p {
+                font-size: 0.9rem;
+            }
+            
+            .tab {
+                min-width: 100px;
+                padding: 0.75rem 0.25rem;
+                font-size: 0.8rem;
+            }
+            
+            .network-actions {
+                flex-direction: column;
+            }
+            
+            .network-actions .btn {
+                width: 100%;
+                min-width: auto;
+            }
+            
+            .form-actions {
+                flex-direction: column-reverse;
+            }
+            
+            .form-actions .btn {
+                width: 100%;
+            }
+        }
+
+        /* Landscape orientation on mobile */
+        @media (max-width: 768px) and (orientation: landscape) {
+            .header {
+                padding: 1rem;
+            }
+            
+            .header h1 {
+                font-size: 1.5rem;
+                margin-bottom: 0.25rem;
+            }
+            
+            .header p {
+                font-size: 0.9rem;
+            }
+            
+            .tab-content {
+                padding: 0.75rem;
+            }
+            
+            .empty-state {
+                padding: 2rem 1rem;
+            }
+            
+            .empty-state i {
+                font-size: 2rem;
+            }
+        }
+
+        /* Touch improvements */
+        @media (hover: none) and (pointer: coarse) {
+            .network-item:hover {
+                background: #f8f9fa;
+                border-color: transparent;
+            }
+            
+            .network-item:active {
+                background: #e9ecef;
+                border-color: #667eea;
+                transform: scale(0.98);
+            }
+            
+            .btn:hover {
+                transform: none;
+                box-shadow: none;
+            }
+            
+            .btn:active {
+                transform: scale(0.95);
+            }
+        }
+
+        /* High DPI screens */
+        @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+            .spinner {
+                border-width: 2px;
+            }
+        }
+
+        /* Dark mode support for mobile */
+        @media (prefers-color-scheme: dark) {
+            .form-control {
+                background-color: #fff;
+                color: #333;
+            }
+        }
+
+        /* Reduce motion for accessibility */
+        @media (prefers-reduced-motion: reduce) {
+            .btn, .network-item, .modal, .toast {
+                transition: none;
+            }
+            
+            .spinner {
+                animation: none;
+                border-top-color: transparent;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><i class="fas fa-wifi"></i> WiFi Manager</h1>
+            <p>Connect to available WiFi networks</p>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('available')">
+                <i class="fas fa-search"></i> Available
+            </button>
+            <button class="tab" onclick="showTab('connected')">
+                <i class="fas fa-link"></i> Connected
+            </button>
+            <button class="tab" onclick="showTab('saved')">
+                <i class="fas fa-bookmark"></i> Saved
+            </button>
+        </div>
+
+        <!-- Available Networks Tab -->
+        <div id="available" class="tab-content active">
+            <div class="controls">
+                <button class="btn btn-primary" onclick="refreshNetworks()">
+                    <i class="fas fa-sync-alt"></i> Scan Networks
+                </button>
+            </div>
+            <ul class="network-list" id="available-networks">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </ul>
+        </div>
+
+        <!-- Connected Network Tab -->
+        <div id="connected" class="tab-content">
+            <div class="controls">
+                <button class="btn btn-primary" onclick="refreshConnected()">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+            </div>
+            <div id="connected-network">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Saved Networks Tab -->
+        <div id="saved" class="tab-content">
+            <div class="controls">
+                <button class="btn btn-primary" onclick="refreshSaved()">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+                <button class="btn btn-danger" onclick="forgetAllNetworks()">
+                    <i class="fas fa-trash"></i> Forget All
+                </button>
+            </div>
+            <ul class="network-list" id="saved-networks">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Connect Modal -->
+    <div class="modal" id="connect-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Connect to Network</h3>
+                <button class="close" onclick="closeModal()">&times;</button>
+            </div>
+            <form id="connect-form">
+                <div class="form-group">
+                    <label>Network Name:</label>
+                    <input type="text" id="connect-ssid" class="form-control" readonly>
+                </div>
+                <div class="form-group" id="password-group">
+                    <label>Password:</label>
+                    <input type="password" id="connect-password" class="form-control" placeholder="Enter network password">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-success">Connect</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // Configuration
+        const API_BASE = '';
+        let currentTab = 'available';
+
+        // Initialize app
+        document.addEventListener('DOMContentLoaded', function() {
+            refreshNetworks();
+        });
+
+        function showTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(tabName).classList.add('active');
+
+            currentTab = tabName;
+
+            // Load content based on tab
+            switch(tabName) {
+                case 'available':
+                    refreshNetworks();
+                    break;
+                case 'connected':
+                    refreshConnected();
+                    break;
+                case 'saved':
+                    refreshSaved();
+                    break;
+            }
+        }
+
+        async function refreshNetworks() {
+            const container = document.getElementById('available-networks');
+            container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+            try {
+                const response = await fetch(`${API_BASE}/list-networks`);
+                if (!response.ok) throw new Error('Failed to fetch networks');
+                
+                const data = await response.json();
+                renderAvailableNetworks(data.networks || []);
+            } catch (error) {
+                console.error('Error:', error);
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p>Error loading networks. Please try again.</p>
+                    </div>
+                `;
+                showToast('Error loading networks', 'error');
+            }
+        }
+
+        async function refreshConnected() {
+            const container = document.getElementById('connected-network');
+            container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+            try {
+                const response = await fetch(`${API_BASE}/list-connected`);
+                if (!response.ok) throw new Error('Failed to fetch connected network');
+                
+                const data = await response.json();
+                renderConnectedNetwork(data.connected);
+            } catch (error) {
+                console.error('Error:', error);
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-wifi-slash"></i>
+                        <p>Error loading connection status</p>
+                    </div>
+                `;
+                showToast('Error loading connection status', 'error');
+            }
+        }
+
+        async function refreshSaved() {
+            const container = document.getElementById('saved-networks');
+            container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+            try {
+                const response = await fetch(`${API_BASE}/list-saved`);
+                if (!response.ok) throw new Error('Failed to fetch saved networks');
+                
+                const data = await response.json();
+                renderSavedNetworks(data.saved_networks || []);
+            } catch (error) {
+                console.error('Error:', error);
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-bookmark"></i>
+                        <p>Error loading saved networks</p>
+                    </div>
+                `;
+                showToast('Error loading saved networks', 'error');
+            }
+        }
+
+        function renderAvailableNetworks(networks) {
+            const container = document.getElementById('available-networks');
+            
+            if (!networks || networks.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-search"></i>
+                        <p>No networks found. Try refreshing.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = networks.map(network => `
+                <li class="network-item" onclick="showConnectModal('${escapeHtml(network.ssid)}', '${escapeHtml(network.security)}')">
+                    <div class="network-info">
+                        <div class="network-name">
+                            <i class="fas fa-wifi"></i> 
+                            <span>${escapeHtml(network.ssid)}</span>
+                            <span class="badge ${getSecurityBadgeClass(network.security)}">
+                                <i class="fas fa-${getSecurityIcon(network.security)}"></i>
+                                ${getSecurityLabel(network.security)}
+                            </span>
+                        </div>
+                        <div class="network-details">
+                            Security: ${escapeHtml(network.security)}
+                        </div>
+                    </div>
+                </li>
+            `).join('');
+        }
+
+        function renderConnectedNetwork(network) {
+            const container = document.getElementById('connected-network');
+            
+            if (!network) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-wifi-slash"></i>
+                        <p>No network connected</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="network-item connected">
+                    <div class="network-info">
+                        <div class="network-name">
+                            <i class="fas fa-wifi"></i> 
+                            <span>${escapeHtml(network.ssid)}</span>
+                            <span class="badge badge-success">Connected</span>
+                        </div>
+                        <div class="network-details">
+                            Interface: ${escapeHtml(network.interface)}<br>
+                            Security: ${escapeHtml(network.security)}<br>
+                            Signal: ${network.signal_strength}%
+                            ${network.ip_address ? `<br>IP: ${escapeHtml(network.ip_address)}` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderSavedNetworks(networks) {
+            const container = document.getElementById('saved-networks');
+            
+            if (!networks || networks.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-bookmark"></i>
+                        <p>No saved networks found</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = networks.map(network => `
+                <li class="network-item">
+                    <div class="network-info">
+                        <div class="network-name">
+                            <i class="fas fa-bookmark"></i> ${escapeHtml(network.ssid)}
+                        </div>
+                        <div class="network-details">
+                            Security: ${escapeHtml(network.security)}
+                        </div>
+                    </div>
+                    <div class="network-actions">
+                        <button class="btn btn-success" onclick="event.stopPropagation(); connectToSaved('${escapeHtml(network.ssid)}')">
+                            <i class="fas fa-link"></i> Connect
+                        </button>
+                        <button class="btn btn-danger" onclick="event.stopPropagation(); forgetNetwork('${escapeHtml(network.ssid)}')">
+                            <i class="fas fa-trash"></i> Forget
+                        </button>
+                    </div>
+                </li>
+            `).join('');
+        }
+
+        function showConnectModal(ssid, security) {
+            document.getElementById('connect-ssid').value = ssid;
+            document.getElementById('connect-password').value = '';
+            
+            const passwordGroup = document.getElementById('password-group');
+            if (security === 'none' || security === 'open' || security === '') {
+                passwordGroup.style.display = 'none';
+            } else {
+                passwordGroup.style.display = 'block';
+            }
+            
+            document.getElementById('connect-modal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('connect-modal').style.display = 'none';
+        }
+
+        document.getElementById('connect-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const ssid = document.getElementById('connect-ssid').value;
+            const password = document.getElementById('connect-password').value;
+            
+            closeModal();
+            
+            try {
+                const response = await fetch(`${API_BASE}/connect`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        ssid: ssid,
+                        passphrase: password || undefined
+                    })
+                });
+                
+                if (!response.ok) throw new Error('Connection failed');
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast(`Connected to ${ssid}`, 'success');
+                    setTimeout(() => refreshConnected(), 2000);
+                } else {
+                    showToast(`Failed to connect to ${ssid}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showToast(`Error connecting to ${ssid}`, 'error');
+            }
+        });
+
+        async function connectToSaved(ssid) {
+            try {
+                const response = await fetch(`${API_BASE}/connect`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        ssid: ssid
+                        // No passphrase needed for saved networks
+                    })
+                });
+                
+                if (!response.ok) throw new Error('Connection failed');
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast(`Connected to ${ssid}`, 'success');
+                    setTimeout(() => refreshConnected(), 2000);
+                } else {
+                    showToast(`Failed to connect to ${ssid}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showToast(`Error connecting to ${ssid}`, 'error');
+            }
+        }
+
+        async function forgetNetwork(ssid) {
+            if (!confirm(`Are you sure you want to forget "${ssid}"?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/forget-network`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        ssid: ssid
+                    })
+                });
+                
+                if (!response.ok) throw new Error('Failed to forget network');
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast(`Forgot network "${ssid}"`, 'success');
+                    refreshSaved();
+                } else {
+                    showToast(`Failed to forget "${ssid}"`, 'error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showToast(`Error forgetting "${ssid}"`, 'error');
+            }
+        }
+
+        async function forgetAllNetworks() {
+            if (!confirm('Are you sure you want to forget ALL saved networks? This cannot be undone.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/forget-all`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({})
+                });
+                
+                if (!response.ok) throw new Error('Failed to forget networks');
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast('All networks forgotten', 'success');
+                    refreshSaved();
+                } else {
+                    showToast('Failed to forget all networks', 'error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showToast('Error forgetting all networks', 'error');
+            }
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast ${type}`;
+            toast.classList.add('show');
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function getSecurityBadgeClass(security) {
+            if (!security || security === 'none' || security === 'open') {
+                return 'badge-warning';
+            }
+            return 'badge-info';
+        }
+
+        function getSecurityIcon(security) {
+            if (!security || security === 'none' || security === 'open') {
+                return 'unlock';
+            }
+            return 'lock';
+        }
+
+        function getSecurityLabel(security) {
+            if (!security || security === 'none' || security === 'open') {
+                return 'Open';
+            }
+            return 'Secured';
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('connect-modal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+
+        // Prevent zoom on iOS when focusing input fields
+        document.addEventListener('touchstart', function() {}, {passive: true});
+    </script>
+</body>
+</html>

@@ -29,6 +29,11 @@ pub struct Config {
     pub list_saved: bool,
     pub forget_network: Option<String>,
     pub connect: Option<(String, String)>, // (SSID, passphrase)
+    // New hotspot management commands
+    pub start_hotspot: bool,
+    pub stop_hotspot: bool,
+    pub check_hotspot: bool,
+    pub restart_hotspot: bool,
 }
 
 pub fn get_config() -> Config {
@@ -160,6 +165,31 @@ pub fn get_config() -> Config {
                 .help("Passphrase for the WiFi network to connect to")
                 .takes_value(true),
         )
+        // New hotspot management arguments
+        .arg(
+            Arg::with_name("start-hotspot")
+                .long("start-hotspot")
+                .help("Start the WiFi hotspot and exit")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("stop-hotspot")
+                .long("stop-hotspot")
+                .help("Stop the WiFi hotspot and exit")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("check-hotspot")
+                .long("check-hotspot")
+                .help("Check hotspot status and exit")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("restart-hotspot")
+                .long("restart-hotspot")
+                .help("Restart the WiFi hotspot and exit")
+                .takes_value(false),
+        )
         .get_matches();
 
     let interface: Option<String> = matches.value_of("portal-interface").map_or_else(
@@ -219,6 +249,12 @@ pub fn get_config() -> Config {
         None
     };
 
+    // New hotspot command flags
+    let start_hotspot = matches.is_present("start-hotspot");
+    let stop_hotspot = matches.is_present("stop-hotspot");
+    let check_hotspot = matches.is_present("check-hotspot");
+    let restart_hotspot = matches.is_present("restart-hotspot");
+
     Config {
         interface,
         ssid,
@@ -234,6 +270,10 @@ pub fn get_config() -> Config {
         list_saved,
         forget_network,
         connect,
+        start_hotspot,
+        stop_hotspot,
+        check_hotspot,
+        restart_hotspot,
     }
 }
 

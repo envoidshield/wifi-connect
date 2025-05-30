@@ -34,14 +34,18 @@ class WiFiConnectWrapper:
                 
                 # Parse each network entry
                 # The pattern is "SSID: <name>, Security: <type>"
-                network_pattern = re.compile(r'SSID: (.*?), Security: (.*?)$', re.MULTILINE)
+                network_pattern = re.compile(r'SSID: (.*?), Security: (.*?)(?:,|$)', re.MULTILINE)
                 matches = network_pattern.findall(networks_section)
                 
                 for ssid, security in matches:
-                    networks.append({
-                        "ssid": ssid.strip(),
-                        "security": security.strip(),
-                    })
+                    # Skip empty lines and connected status indicators
+                    ssid_clean = ssid.strip()
+                    security_clean = security.strip()
+                    if ssid_clean and not ssid_clean.startswith('('):
+                        networks.append({
+                            "ssid": ssid_clean,
+                            "security": security_clean,
+                        })
             
             return networks
         except subprocess.CalledProcessError as e:
@@ -62,27 +66,32 @@ class WiFiConnectWrapper:
             # Parse the output to extract connected network info
             output = result.stdout
             
-            if "Connected Network:" in output:
+            if "Connected Network:" in output or "Connected:" in output:
                 # Extract the connected network section
-                connected_section = output.split("Connected Network:")[1]
+                if "Connected Network:" in output:
+                    connected_section = output.split("Connected Network:")[1]
+                else:
+                    connected_section = output.split("Connected:")[1]
                 
                 # Parse the connected network information
                 # Expected format: SSID: <name>, Security: <type>, Signal: <strength>%, Interface: <interface>, IP: <ip_address>
-                ssid_match = re.search(r'SSID: (.*?)(?:,|$)', connected_section)
-                security_match = re.search(r'Security: (.*?)(?:,|$)', connected_section)
+                ssid_match = re.search(r'SSID: (.*?)(?:,|$)', connected_section, re.MULTILINE)
+                security_match = re.search(r'Security: (.*?)(?:,|$)', connected_section, re.MULTILINE)
                 signal_match = re.search(r'Signal: (\d+)%', connected_section)
-                interface_match = re.search(r'Interface: (.*?)(?:,|$)', connected_section)
-                ip_match = re.search(r'IP: (.*?)(?:,|$)', connected_section)
+                interface_match = re.search(r'Interface: (.*?)(?:,|$)', connected_section, re.MULTILINE)
+                ip_match = re.search(r'IP: (.*?)(?:,|\n|$)', connected_section, re.MULTILINE)
                 
                 if ssid_match:
-                    return {
+                    connected_network = {
                         "ssid": ssid_match.group(1).strip(),
                         "security": security_match.group(1).strip() if security_match else "unknown",
                         "signal_strength": int(signal_match.group(1)) if signal_match else 0,
                         "interface": interface_match.group(1).strip() if interface_match else "unknown",
                         "ip_address": ip_match.group(1).strip() if ip_match else None
                     }
-            elif "No network connected" in output or "Not connected" in output:
+                    return connected_network
+                    
+            elif "No network connected" in output or "Not connected" in output or output.strip() == "":
                 return None
             
             return None
@@ -111,16 +120,18 @@ class WiFiConnectWrapper:
                 networks_section = output.split("Saved WiFi Networks:")[1]
                 
                 # Parse each saved network entry
-                # Expected format: "SSID: <name>, Security: <type>, Auto-connect: <true/false>"
-                network_pattern = re.compile(r'SSID: (.*?), Security: (.*?), Auto-connect: (.*?)$', re.MULTILINE)
+                # Expected format: "SSID: <name>, Security: <type>"
+                network_pattern = re.compile(r'SSID: (.*?), Security: (.*?)(?:,|$)', re.MULTILINE)
                 matches = network_pattern.findall(networks_section)
                 
-                for ssid, security, auto_connect in matches:
-                    networks.append({
-                        "ssid": ssid.strip(),
-                        "security": security.strip(),
-                        "auto_connect": auto_connect.strip().lower() == "true"
-                    })
+                for ssid, security in matches:
+                    ssid_clean = ssid.strip()
+                    security_clean = security.strip()
+                    if ssid_clean:
+                        networks.append({
+                            "ssid": ssid_clean,
+                            "security": security_clean,
+                        })
             elif "No saved networks found" in output:
                 return []
             
@@ -319,8 +330,7 @@ def main():
         print("Saved WiFi networks:")
         if saved_networks:
             for idx, network in enumerate(saved_networks, 1):
-                auto_connect_str = "Yes" if network['auto_connect'] else "No"
-                print(f"{idx}. {network['ssid']} (Security: {network['security']}, Auto-connect: {auto_connect_str})")
+                print(f"{idx}. {network['ssid']} (Security: {network['security']})")
         else:
             print("No saved networks found.")
         sys.exit(0)

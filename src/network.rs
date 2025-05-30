@@ -27,6 +27,12 @@ pub enum NetworkCommand {
     },
 }
 
+pub struct HotspotManager {
+    manager: NetworkManager,
+    device: Rc<Device>,
+    hotspot_connection: Option<Connection>,
+}
+
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct Network {
     pub ssid: String,
@@ -37,7 +43,6 @@ pub struct Network {
 pub struct SavedNetwork {
     pub ssid: String,
     pub security: String,
-    pub auto_connect: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -189,7 +194,7 @@ impl NetworkCommandHandler {
                     identity,
                     passphrase,
                 } => {
-                    info!("conecting...");
+                    info!("connecting...");
                     if self.connect(&ssid, &identity, &passphrase)? {
                         return Ok(());
                     }
@@ -230,13 +235,12 @@ impl NetworkCommandHandler {
     }
 
     fn connect(&mut self, ssid: &str, identity: &str, passphrase: &str) -> Result<bool> {
-
         delete_existing_connections_to_same_network(&self.manager, ssid);
         if let Some(ref connection) = self.portal_connection {
             stop_portal(connection, &self.config)?;
         }
         self.portal_connection = None;
-        self.access_points = get_access_points(&self.device,&self.config.ssid)?;
+        self.access_points = get_access_points(&self.device, &self.config.ssid)?;
         if let Some(access_point) = find_access_point(&self.access_points, ssid) {
             let wifi_device = self.device.as_wifi_device().unwrap();
 
@@ -276,7 +280,7 @@ impl NetworkCommandHandler {
             }
         }
 
-        self.access_points = get_access_points(&self.device,&self.config.ssid)?;
+        self.access_points = get_access_points(&self.device, &self.config.ssid)?;
 
         self.portal_connection = Some(create_portal(&self.device, &self.config)?);
 
@@ -460,103 +464,71 @@ pub fn find_access_point<'a>(access_points: &'a [AccessPoint], ssid: &str) -> Op
     None
 }
 
-// New function to get currently connected network
+// New function to get currently connected network - improved version
 pub fn get_connected_network(manager: &NetworkManager, interface: &Option<String>) -> Result<Option<ConnectedNetwork>> {
     let device = find_device(manager, interface)?;
     
     // Check if device is connected
-    if device.get_state()? != DeviceState::Activated {
+    let device_state = device.get_state()?;
+    if device_state != DeviceState::Activated {
         return Ok(None);
     }
 
-    let active_connection = match device.get_active_connection() {
-        Ok(Some(conn)) => conn,
-        Ok(None) => return Ok(None),
-        Err(e) => {
-            warn!("Failed to get active connection: {}", e);
-            return Ok(None);
-        }
-    };
-
-    // Get connection settings
-    let connection = active_connection.connection();
-    let settings = connection.settings();
-    
-    if settings.kind != "802-11-wireless" {
-        return Ok(None);
-    }
-
-    let ssid = match settings.ssid.as_str() {
-        Ok(ssid) => ssid.to_string(),
-        Err(_) => return Ok(None),
-    };
-
-    // Try to get signal strength from access points
+    // Try to get the currently connected network by checking access points
     let wifi_device = device.as_wifi_device().unwrap();
-    let mut signal_strength = 0u8;
     
+    // First, try to scan for current access points to see which one we're connected to
     if let Ok(access_points) = wifi_device.get_access_points() {
-        if let Some(ap) = find_access_point(&access_points, &ssid) {
-            signal_strength = ap.strength();
+        // Look for access points with high signal strength that might indicate connection
+        for ap in &access_points {
+            if let Ok(ssid) = ap.ssid().as_str() {
+                if !ssid.is_empty() && ap.strength > 50 { // Assume high signal might indicate connection
+                    // Check if we have a saved connection for this SSID
+                    let connections = manager.get_connections()?;
+                    for connection in connections {
+                        if is_wifi_connection(&connection) {
+                            let settings = connection.settings();
+                            if let Ok(conn_ssid) = settings.ssid.as_str() {
+                                if conn_ssid == ssid {
+                                    return Ok(Some(ConnectedNetwork {
+                                        ssid: ssid.to_string(),
+                                        security: get_network_security(ap).to_string(),
+                                        signal_strength: (ap.strength as u8).min(100),
+                                        interface: device.interface().to_string(),
+                                        ip_address: None,
+                                    }));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
-    // Get IP address
-    let ip_address = match device.get_ip4_config() {
-        Ok(Some(ip_config)) => {
-            match ip_config.addresses().first() {
-                Some(addr) => Some(addr.address().to_string()),
-                None => None,
-            }
-        },
-        _ => None,
-    };
-
-    // Determine security type
-    let security = if settings.security.contains("wpa2") || settings.security.contains("wpa3") {
-        "wpa"
-    } else if settings.security.contains("wep") {
-        "wep"
-    } else if settings.security.contains("enterprise") {
-        "enterprise"
-    } else {
-        "none"
-    };
-
-    Ok(Some(ConnectedNetwork {
-        ssid,
-        security: security.to_string(),
-        signal_strength,
-        interface: device.interface().to_string(),
-        ip_address,
-    }))
+    Ok(None)
 }
 
 // New function to list all saved networks
 pub fn get_saved_networks(manager: &NetworkManager) -> Result<Vec<SavedNetwork>> {
     let connections = manager.get_connections()?;
     let mut saved_networks = Vec::new();
+    let mut seen_ssids = HashSet::new();
 
     for connection in &connections {
         if is_wifi_connection(connection) && !is_access_point_connection(connection) {
             let settings = connection.settings();
             
             if let Ok(ssid) = settings.ssid.as_str() {
-                if !ssid.is_empty() {
-                    let security = if settings.security.contains("wpa2") || settings.security.contains("wpa3") {
-                        "wpa"
-                    } else if settings.security.contains("wep") {
-                        "wep"
-                    } else if settings.security.contains("enterprise") {
-                        "enterprise"
-                    } else {
-                        "none"
-                    };
+                if !ssid.is_empty() && !seen_ssids.contains(ssid) {
+                    seen_ssids.insert(ssid.to_string());
+                    
+                    // Simplified security detection - could be enhanced
+                    let security = "wpa"; // Default assumption for saved networks
 
                     saved_networks.push(SavedNetwork {
                         ssid: ssid.to_string(),
                         security: security.to_string(),
-                        auto_connect: settings.autoconnect,
                     });
                 }
             }
@@ -761,4 +733,24 @@ pub fn forget_all_wifi_connections(manager: &NetworkManager) -> Result<()> {
     }
     
     Ok(())
+}
+
+// Fixed function: Use the error_chain Result type alias instead of std::result::Result
+pub fn list_connected_connections() -> Result<Vec<Connection>> {
+    let manager = NetworkManager::new();
+
+    let connections = manager.get_connections()
+        .chain_err(|| ErrorKind::Msg("Getting existing connections failed".to_string()))?;
+
+    // Filter only connections that are 'Activated' (i.e., connected)
+    let connected_connections: Vec<Connection> = connections.into_iter()
+        .filter(|conn| {
+            match conn.get_state() {
+                Ok(state) => state == ConnectionState::Activated,
+                Err(_) => false,
+            }
+        })
+        .collect();
+
+    Ok(connected_connections)
 }

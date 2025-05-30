@@ -93,9 +93,10 @@ connection=$?
 
 if [ "$connection" -eq 0 ]; then
     printf 'Starting API\n'
-    python3 api.py --binary "./wifi-connect" --serve --port 4444
 else
-    printf 'Starting WiFi Connect\n'
-    ./wifi-connect
+    printf 'Starting hotspot \n'
+    ./wifi-connect --start_hotspot
 fi
+
+python3 api.py --binary "./wifi-connect" --serve --port 8080
 
