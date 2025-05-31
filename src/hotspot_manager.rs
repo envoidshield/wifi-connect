@@ -165,7 +165,7 @@ impl HotspotManager {
         info!("Creating access point '{}'...", self.config.ssid);
         let wifi_device = self.device.as_wifi_device().unwrap();
         let (portal_connection, _) = wifi_device
-            .create_hotspot(&self.config.ssid, portal_passphrase, Some(self.config.gateway))
+            .create_hotspot(self.config.ssid.as_str(), portal_passphrase, Some(self.config.gateway))
             .chain_err(|| ErrorKind::CreateCaptivePortal)?;
         
         info!("Access point '{}' created", self.config.ssid);

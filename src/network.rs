@@ -15,7 +15,8 @@ use dnsmasq::{start_dnsmasq, stop_dnsmasq};
 use errors::*;
 use exit::{exit, trap_exit_signals, ExitResult};
 use server::start_server;
-
+use std::rc::Rc
+;
 pub enum NetworkCommand {
     Activate,
     Timeout,

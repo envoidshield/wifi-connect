@@ -218,10 +218,10 @@ class WiFiHandler(BaseHTTPRequestHandler):
             saved_networks = self.wifi_manager.list_saved()
             self._set_headers()
             self.wfile.write(json.dumps({"saved_networks": saved_networks}).encode())
-        elif self.path.startswith('/static/ui/public/static'):
-            file_path = self.path.lstrip('/')
-            fs_path = os.path.join('ui', 'public', file_path[len('static/'):])  # maps /static/... to ui/public/...
-            
+        elif self.path.startswith('/ui/public/static'):
+            rel_path = self.path.removeprefix('/ui/public/static/')
+            fs_path = os.path.join('ui', 'public', 'static', rel_path)
+
             if os.path.exists(fs_path) and os.path.isfile(fs_path):
                 mime_type, _ = mimetypes.guess_type(fs_path)
                 self.send_response(200)
@@ -233,6 +233,7 @@ class WiFiHandler(BaseHTTPRequestHandler):
             else:
                 self._set_headers(404)
                 self.wfile.write(json.dumps({"error": "File not found"}).encode())
+
 
         else:
             self._set_headers(404)
