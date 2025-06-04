@@ -91,12 +91,13 @@ check_connection() {
 check_connection
 connection=$? 
 
+python3 api.py --binary "./wifi-connect" --serve --port 8080
+
 if [ "$connection" -eq 0 ]; then
     printf 'Starting API\n'
 else
     printf 'Starting hotspot \n'
-    ./wifi-connect --start_hotspot
+    ./wifi-connect --start-hotspot --ssid "EnVoid-connect-${RESIN_DEVICE_UUID:0:5}"
 fi
 
-python3 api.py --binary "./wifi-connect" --serve --port 8080
 

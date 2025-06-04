@@ -78,18 +78,22 @@ fn run() -> Result<()> {
     // Handle hotspot management commands first
     if config.start_hotspot {
         return handle_start_hotspot(config);
+        return Ok(());
     }
 
     if config.stop_hotspot {
         return handle_stop_hotspot(config);
+        return Ok(());
     }
 
     if config.check_hotspot {
         return handle_check_hotspot(config);
+        return Ok(());
     }
 
     if config.restart_hotspot {
         return handle_restart_hotspot(config);
+        return Ok(());
     }
 
     // Handle existing WiFi management commands
@@ -235,7 +239,6 @@ fn run() -> Result<()> {
 }
 
 // New hotspot management functions
-
 fn handle_start_hotspot(config: config::Config) -> Result<()> {
     info!("Starting hotspot '{}'...", config.ssid);
     
@@ -245,7 +248,34 @@ fn handle_start_hotspot(config: config::Config) -> Result<()> {
     let status = hotspot.get_hotspot_status();
     status.print_status();
     
-    info!("Hotspot started successfully. Use --stop-hotspot to stop it.");
+    info!("Hotspot started successfully. Press Ctrl+C to stop.");
+    
+    // Set up signal handling for graceful shutdown
+    let (exit_tx, exit_rx) = channel();
+    
+    thread::spawn(move || {
+        if let Err(e) = exit::trap_exit_signals() {
+            error!("Signal handling failed: {}", e);
+            return;
+        }
+        
+        info!("Received shutdown signal");
+        let _ = exit_tx.send(());
+    });
+    
+    // Wait for shutdown signal
+    match exit_rx.recv() {
+        Ok(_) => {
+            info!("Shutting down hotspot...");
+            hotspot.stop_hotspot()?;
+            info!("Hotspot stopped");
+        }
+        Err(e) => {
+            error!("Error waiting for exit signal: {}", e);
+            hotspot.stop_hotspot()?;
+        }
+    }
+    
     Ok(())
 }
 
