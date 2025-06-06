@@ -36,6 +36,7 @@ pub struct Config {
     pub restart_hotspot: bool,
 }
 
+
 pub fn get_config() -> Config {
     let matches = App::new(crate_name!())
         .version(crate_version!())

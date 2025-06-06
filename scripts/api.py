@@ -5,6 +5,7 @@ import subprocess
 import sys
 import json
 import re
+import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 import mimetypes
@@ -14,9 +15,113 @@ class WiFiConnectWrapper:
         """Initialize with path to the wifi-connect binary"""
         self.binary_path = binary_path
     
-    def list_networks(self):
-        """List available WiFi networks using the binary"""
+    def check_hotspot_status(self):
+        """Check if hotspot is currently running"""
         try:
+            result = subprocess.run(
+                [self.binary_path, "--check-hotspot"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            
+            # Parse the output to determine if hotspot is running
+            output = result.stdout
+            if "Hotspot Status: RUNNING" in output:
+                # Extract hotspot details
+                ssid_match = re.search(r'SSID: (.*?)(?:\n|$)', output)
+                gateway_match = re.search(r'Gateway: (.*?)(?:\n|$)', output)
+                interface_match = re.search(r'Interface: (.*?)(?:\n|$)', output)
+                password_match = re.search(r'Password Protected: (.*?)(?:\n|$)', output)
+                uptime_match = re.search(r'Uptime: (.*?)(?:\n|$)', output)
+                
+                return {
+                    "running": True,
+                    "ssid": ssid_match.group(1).strip() if ssid_match else None,
+                    "gateway": gateway_match.group(1).strip() if gateway_match else None,
+                    "interface": interface_match.group(1).strip() if interface_match else None,
+                    "password_protected": password_match.group(1).strip() == "true" if password_match else False,
+                    "uptime": uptime_match.group(1).strip() if uptime_match else None
+                }
+            else:
+                return {"running": False}
+                
+        except subprocess.CalledProcessError as e:
+            print(f"Error checking hotspot status: {e}", file=sys.stderr)
+            return {"running": False}
+    
+    def start_hotspot(self):
+        """Start the hotspot"""
+        try:
+            # Start hotspot in background (non-blocking)
+            process = subprocess.Popen(
+                [self.binary_path, "--start-hotspot"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            
+            # Give it a moment to start
+            time.sleep(2)
+            
+            # Check if it started successfully
+            status = self.check_hotspot_status()
+            return status.get("running", False)
+            
+        except Exception as e:
+            print(f"Error starting hotspot: {e}", file=sys.stderr)
+            return False
+    
+    def stop_hotspot(self):
+        """Stop the hotspot"""
+        try:
+            subprocess.run(
+                [self.binary_path, "--stop-hotspot"],
+                check=True,
+                capture_output=True,
+                text=True
+            )
+            return True
+        except subprocess.CalledProcessError as e:
+            print(f"Error stopping hotspot: {e}", file=sys.stderr)
+            return False
+    
+    def restart_hotspot(self):
+        """Restart the hotspot"""
+        try:
+            subprocess.run(
+                [self.binary_path, "--restart-hotspot"],
+                check=True,
+                capture_output=True,
+                text=True
+            )
+            return True
+        except subprocess.CalledProcessError as e:
+            print(f"Error restarting hotspot: {e}", file=sys.stderr)
+            return False
+    
+    def list_networks(self):
+        """List available WiFi networks, temporarily stopping hotspot if needed"""
+        hotspot_was_running = False
+        hotspot_info = None
+        
+        try:
+            # Check if hotspot is running
+            hotspot_status = self.check_hotspot_status()
+            if hotspot_status.get("running", False):
+                hotspot_was_running = True
+                hotspot_info = hotspot_status
+                print("Hotspot is running, temporarily stopping to scan networks...", file=sys.stderr)
+                
+                # Stop hotspot to allow scanning
+                if not self.stop_hotspot():
+                    print("Failed to stop hotspot for scanning", file=sys.stderr)
+                    return []
+                
+                # Wait a moment for the interface to be available
+                time.sleep(3)
+            
+            # Now scan for networks
             result = subprocess.run(
                 [self.binary_path, "--list-networks"],
                 capture_output=True,
@@ -26,7 +131,6 @@ class WiFiConnectWrapper:
             
             # Parse the output based on the actual format
             networks = []
-            # Look for the part after "Available WiFi Networks:"
             output = result.stdout
             
             # Check if the expected section exists
@@ -50,10 +154,20 @@ class WiFiConnectWrapper:
                         })
             
             return networks
+            
         except subprocess.CalledProcessError as e:
             print(f"Error listing networks: {e}", file=sys.stderr)
             print(f"Error output: {e.stderr}", file=sys.stderr)
             return []
+        
+        finally:
+            # Restart hotspot if it was running before
+            if hotspot_was_running:
+                print("Restarting hotspot...", file=sys.stderr)
+                if not self.start_hotspot():
+                    print("Failed to restart hotspot after scanning", file=sys.stderr)
+                else:
+                    print("Hotspot restarted successfully", file=sys.stderr)
     
     def list_connected(self):
         """List currently connected WiFi network using the binary"""
@@ -206,18 +320,28 @@ class WiFiHandler(BaseHTTPRequestHandler):
             except FileNotFoundError:
                 self._set_headers(404)
                 self.wfile.write(json.dumps({"error": "index.html not found"}).encode())
+        
         elif self.path == '/list-networks':
+            print("Scanning for networks...", file=sys.stderr)
             networks = self.wifi_manager.list_networks()
             self._set_headers()
             self.wfile.write(json.dumps({"networks": networks}).encode())
+        
         elif self.path == '/list-connected':
             connected = self.wifi_manager.list_connected()
             self._set_headers()
             self.wfile.write(json.dumps({"connected": connected}).encode())
+        
         elif self.path == '/list-saved':
             saved_networks = self.wifi_manager.list_saved()
             self._set_headers()
             self.wfile.write(json.dumps({"saved_networks": saved_networks}).encode())
+        
+        elif self.path == '/hotspot-status':
+            status = self.wifi_manager.check_hotspot_status()
+            self._set_headers()
+            self.wfile.write(json.dumps({"hotspot": status}).encode())
+        
         elif self.path.startswith('/ui/public/static'):
             rel_path = self.path.removeprefix('/ui/public/static/')
             fs_path = os.path.join('ui', 'public', 'static', rel_path)
@@ -233,7 +357,6 @@ class WiFiHandler(BaseHTTPRequestHandler):
             else:
                 self._set_headers(404)
                 self.wfile.write(json.dumps({"error": "File not found"}).encode())
-
 
         else:
             self._set_headers(404)
@@ -276,6 +399,21 @@ class WiFiHandler(BaseHTTPRequestHandler):
                 self._set_headers()
                 self.wfile.write(json.dumps({"success": success}).encode())
             
+            elif self.path == '/start-hotspot':
+                success = self.wifi_manager.start_hotspot()
+                self._set_headers()
+                self.wfile.write(json.dumps({"success": success}).encode())
+            
+            elif self.path == '/stop-hotspot':
+                success = self.wifi_manager.stop_hotspot()
+                self._set_headers()
+                self.wfile.write(json.dumps({"success": success}).encode())
+            
+            elif self.path == '/restart-hotspot':
+                success = self.wifi_manager.restart_hotspot()
+                self._set_headers()
+                self.wfile.write(json.dumps({"success": success}).encode())
+            
             else:
                 self._set_headers(404)
                 self.wfile.write(json.dumps({"error": "Not found"}).encode())
@@ -312,6 +450,10 @@ def main():
     parser.add_argument('--forget-network', metavar='ssid', help='Forget a specific WiFi network by SSID and exit')
     parser.add_argument('--connect', metavar='ssid', help='Connect to a specific WiFi network')
     parser.add_argument('--passphrase', metavar='passphrase', help='Passphrase for the WiFi network to connect to')
+    parser.add_argument('--start-hotspot', action='store_true', help='Start the hotspot and exit')
+    parser.add_argument('--stop-hotspot', action='store_true', help='Stop the hotspot and exit')
+    parser.add_argument('--restart-hotspot', action='store_true', help='Restart the hotspot and exit')
+    parser.add_argument('--check-hotspot', action='store_true', help='Check hotspot status and exit')
     parser.add_argument('--serve', action='store_true', help='Run as a microserver')
     parser.add_argument('--port', type=int, default=8000, help='Port for the server to listen on (default: 8000)')
     
@@ -375,9 +517,49 @@ def main():
             print(f"Failed to connect to {args.connect}.")
         sys.exit(0)
     
+    if args.start_hotspot:
+        if wifi_manager.start_hotspot():
+            print("Hotspot started successfully.")
+        else:
+            print("Failed to start hotspot.")
+        sys.exit(0)
+    
+    if args.stop_hotspot:
+        if wifi_manager.stop_hotspot():
+            print("Hotspot stopped successfully.")
+        else:
+            print("Failed to stop hotspot.")
+        sys.exit(0)
+    
+    if args.restart_hotspot:
+        if wifi_manager.restart_hotspot():
+            print("Hotspot restarted successfully.")
+        else:
+            print("Failed to restart hotspot.")
+        sys.exit(0)
+    
+    if args.check_hotspot:
+        status = wifi_manager.check_hotspot_status()
+        if status.get("running", False):
+            print("Hotspot Status: RUNNING")
+            if status.get("ssid"):
+                print(f"SSID: {status['ssid']}")
+            if status.get("gateway"):
+                print(f"Gateway: {status['gateway']}")
+            if status.get("interface"):
+                print(f"Interface: {status['interface']}")
+            print(f"Password Protected: {status.get('password_protected', False)}")
+            if status.get("uptime"):
+                print(f"Uptime: {status['uptime']}")
+        else:
+            print("Hotspot Status: STOPPED")
+        sys.exit(0)
+    
     # Run as a server if no other operations are specified or --serve is used
     if args.serve or (not any([args.list_networks, args.list_connected, args.list_saved, 
-                              args.forget_all, args.forget_network, args.connect])):
+                              args.forget_all, args.forget_network, args.connect,
+                              args.start_hotspot, args.stop_hotspot, args.restart_hotspot,
+                              args.check_hotspot])):
         try:
             run_server(port=args.port, wifi_manager=wifi_manager)
         except KeyboardInterrupt:
