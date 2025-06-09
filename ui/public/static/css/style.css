@@ -6,7 +6,7 @@
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #2c3e50 0%, #34495e 50%, #7f8c8d 100%);
     min-height: 100vh;
     color: #333;
     padding: 10px;
@@ -22,7 +22,7 @@ body {
 }
 
 .header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #2c3e50 0%, #34495e 50%, #4a5f7a 100%);
     color: white;
     padding: 1.5rem;
     text-align: center;
@@ -69,7 +69,7 @@ body {
 
 .tab.active {
     background: white;
-    color: #667eea;
+    color: #2c3e50;
 }
 
 .tab.active::after {
@@ -79,7 +79,7 @@ body {
     left: 0;
     right: 0;
     height: 3px;
-    background: #667eea;
+    background: #2c3e50;
 }
 
 .tab-content {
@@ -116,36 +116,36 @@ body {
 }
 
 .btn-primary {
-    background: #667eea;
+    background: #2c3e50;
     color: white;
 }
 
 .btn-primary:hover {
-    background: #5a6fd8;
+    background: #34495e;
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(102,126,234,0.3);
+    box-shadow: 0 4px 12px rgba(44,62,80,0.3);
 }
 
 .btn-danger {
-    background: #e74c3c;
+    background: #95a5a6;
     color: white;
 }
 
 .btn-danger:hover {
-    background: #c0392b;
+    background: #7f8c8d;
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(231,76,60,0.3);
+    box-shadow: 0 4px 12px rgba(149,165,166,0.3);
 }
 
 .btn-success {
-    background: #27ae60;
+    background: #4a5f7a;
     color: white;
 }
 
 .btn-success:hover {
-    background: #229954;
+    background: #5d6d7e;
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(39,174,96,0.3);
+    box-shadow: 0 4px 12px rgba(74,95,122,0.3);
 }
 
 .network-list {
@@ -167,12 +167,12 @@ body {
 
 .network-item:hover {
     background: #e9ecef;
-    border-color: #667eea;
+    border-color: #2c3e50;
 }
 
 .network-item.connected {
-    background: #d1ecf1;
-    border-color: #17a2b8;
+    background: #d6dbdf;
+    border-color: #34495e;
 }
 
 .network-info {
@@ -218,18 +218,18 @@ body {
 }
 
 .badge-success {
-    background: #d4edda;
-    color: #155724;
+    background: #d6dbdf;
+    color: #2c3e50;
 }
 
 .badge-warning {
-    background: #fff3cd;
-    color: #856404;
+    background: #bdc3c7;
+    color: #34495e;
 }
 
 .badge-info {
-    background: #d1ecf1;
-    color: #0c5460;
+    background: #aab7b8;
+    color: #2c3e50;
 }
 
 .modal {
@@ -310,8 +310,8 @@ body {
 
 .form-control:focus {
     outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
+    border-color: #2c3e50;
+    box-shadow: 0 0 0 3px rgba(44,62,80,0.1);
 }
 
 .form-actions {
@@ -348,7 +348,7 @@ body {
     width: 40px;
     height: 40px;
     border: 4px solid #f3f3f3;
-    border-top: 4px solid #667eea;
+    border-top: 4px solid #2c3e50;
     border-radius: 50%;
     animation: spin 1s linear infinite;
 }
@@ -378,11 +378,11 @@ body {
 }
 
 .toast.success {
-    background: #27ae60;
+    background: #2d5016;
 }
 
 .toast.error {
-    background: #e74c3c;
+    background: #722f37;
 }
 
 /* Mobile-specific improvements */
@@ -537,7 +537,7 @@ body {
     
     .network-item:active {
         background: #e9ecef;
-        border-color: #667eea;
+        border-color: #2c3e50;
         transform: scale(0.98);
     }
     
@@ -577,4 +577,3 @@ body {
         border-top-color: transparent;
     }
 }
-
