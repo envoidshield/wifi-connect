@@ -9,7 +9,18 @@ import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 import mimetypes
+import requests
 
+def check_internet_connection():
+    """Check if there is an active internet connection"""
+    try:
+        # Try to make a request to a known host
+        response = requests.get("http://www.google.com", timeout=5)
+        return response.status_code == 200
+    except requests.RequestException as e:
+        print(f"Error checking internet connection: {e}", file=sys.stderr)
+        return False
+    
 class WiFiConnectWrapper:
     def __init__(self, binary_path="wifi-connect"):
         """Initialize with path to the wifi-connect binary"""
@@ -49,10 +60,15 @@ class WiFiConnectWrapper:
         except subprocess.CalledProcessError as e:
             print(f"Error checking hotspot status: {e}", file=sys.stderr)
             return {"running": False}
-    
+        
     def start_hotspot(self):
         """Start the hotspot"""
         try:
+            # Check if the hotspot is already running
+            if self.check_hotspot_status().get("running", False):
+                print("Hotspot is already running.", file=sys.stderr)
+                return True
+
             # Start hotspot in background (non-blocking)
             process = subprocess.Popen(
                 [self.binary_path, "--start-hotspot"],
@@ -71,7 +87,7 @@ class WiFiConnectWrapper:
         except Exception as e:
             print(f"Error starting hotspot: {e}", file=sys.stderr)
             return False
-    
+        
     def stop_hotspot(self):
         """Stop the hotspot"""
         try:
@@ -264,6 +280,16 @@ class WiFiConnectWrapper:
                 [self.binary_path, "--forget-network", ssid],
                 check=True
             )
+            print(f"Successfully forgot network '{ssid}'.", file=sys.stderr)
+            
+            # Check internet connection after forgetting the network
+            if not self.check_internet_connection():
+                print("No internet connection detected. Starting hotspot...", file=sys.stderr)
+                
+                # Start hotspot if it's not already running
+                if not self.start_hotspot():
+                    print("Failed to start hotspot.", file=sys.stderr)
+            
             return True
         except subprocess.CalledProcessError as e:
             print(f"Error forgetting network '{ssid}': {e}", file=sys.stderr)
@@ -277,6 +303,13 @@ class WiFiConnectWrapper:
                 [self.binary_path, "--forget-all"],
                 check=True
             )
+            print("All saved WiFi networks have been forgotten.", file=sys.stderr)
+
+            # Start hotspot after forgetting all networks
+            if self.start_hotspot():
+                print("Hotspot started successfully after forgetting networks.", file=sys.stderr)
+            else:
+                print("Failed to start hotspot after forgetting networks.", file=sys.stderr)
             return True
         except subprocess.CalledProcessError as e:
             print(f"Error forgetting networks: {e}", file=sys.stderr)
@@ -310,9 +343,6 @@ class WiFiHandler(BaseHTTPRequestHandler):
         if self.path == '/':
             # Serve the main HTML file
             try:
-                with open('index.html', 'rb') as f:
-                    content = f.read()
-                self.send_response(200)
                 self.send_header('Content-type', 'text/html')
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
