@@ -98,6 +98,11 @@ if [ "$connection" -eq 0 ]; then
 else
     printf 'Starting hotspot \n'
     ./wifi-connect --start-hotspot &
+    sleep 2
+    ./wifi-connect --stop-hotspot
+    sleep 2
+    ./wifi-connect --start-hotspot &
+    sleep 1
 fi
 
 python3 api.py --binary "./wifi-connect" --serve --port 8080

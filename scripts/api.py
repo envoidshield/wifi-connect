@@ -345,6 +345,67 @@ class WiFiConnectWrapper:
             print(f"Error output: {e.stderr}", file=sys.stderr)
             return []
     
+    def check_internet_connectivity(self, interface=None, timeout=5):
+        """Check if we have actual internet connectivity by pinging reliable servers"""
+        test_hosts = [
+            "8.8.8.8",      # Google DNS
+            "1.1.1.1",      # Cloudflare DNS  
+            "208.67.222.222" # OpenDNS
+        ]
+        
+        for host in test_hosts:
+            try:
+                # Build ping command
+                cmd = ["ping", "-c", "1", "-W", str(timeout)]
+                
+                # If interface is specified, bind to that interface
+                if interface:
+                    cmd.extend(["-I", interface])
+                
+                cmd.append(host)
+                
+                # Run ping command
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout + 2
+                )
+                
+                if result.returncode == 0:
+                    print(f"Internet connectivity confirmed via {host}", file=sys.stderr)
+                    return True
+                    
+            except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as e:
+                print(f"Failed to ping {host}: {e}", file=sys.stderr)
+                continue
+        
+        print("No internet connectivity detected", file=sys.stderr)
+        return False
+
+    def _ensure_connectivity(self):
+        """Helper method to start hotspot if no real internet connection exists"""
+        connected = self.list_connected()
+        
+        if not connected:
+            print("No WiFi network connected, starting hotspot...", file=sys.stderr)
+            if self.start_hotspot():
+                print("Hotspot started successfully.", file=sys.stderr)
+            else:
+                print("Failed to start hotspot.", file=sys.stderr)
+            return
+        
+        # We have a WiFi connection, but check if it has internet access
+        interface = connected.get('interface')
+        if not self.check_internet_connectivity(interface):
+            print(f"Connected to '{connected['ssid']}' but no internet access, starting hotspot...", file=sys.stderr)
+            if self.start_hotspot():
+                print("Hotspot started successfully.", file=sys.stderr)
+            else:
+                print("Failed to start hotspot.", file=sys.stderr)
+        else:
+            print(f"Connected to '{connected['ssid']}' with internet access.", file=sys.stderr)
+
     def forget_network(self, ssid):
         """Forget a specific WiFi network using the binary"""
         try:
@@ -353,15 +414,8 @@ class WiFiConnectWrapper:
                 check=True
             )
             
-            # Check if we're still connected after forgetting
-            time.sleep(2)  # Wait for status to update
-            
-            if not self.is_connected_to_internet():
-                print(f"No network connected after forgetting '{ssid}', starting hotspot...", file=sys.stderr)
-                if self.start_hotspot():
-                    print("Hotspot started successfully after forgetting network", file=sys.stderr)
-                else:
-                    print("Failed to start hotspot after forgetting network", file=sys.stderr)
+            # Check connectivity and start hotspot if needed
+            self._ensure_connectivity()
             
             return True
         except subprocess.CalledProcessError as e:
@@ -369,21 +423,6 @@ class WiFiConnectWrapper:
             print(f"Error output: {e.stderr if hasattr(e, 'stderr') else ''}", file=sys.stderr)
             return False
 
-    def is_connected_to_internet(self):
-        try:
-            # Ping Google's public DNS server to check for internet connectivity
-            # -c 1 specifies one packet
-            # -W 5 specifies a timeout of 5 seconds per packet
-            subprocess.run(
-                ["ping", "-c", "1", "-W", "5", "8.8.8.8"],
-                check=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
-            return True
-        except subprocess.CalledProcessError:
-            return False
-    
     def forget_all(self):
         """Forget all saved WiFi networks using the binary"""
         try:
@@ -392,71 +431,19 @@ class WiFiConnectWrapper:
                 check=True
             )
             
-            # Check if we're still connected after forgetting all
-            time.sleep(2)  # Wait for status to update
-            connected = self.list_connected()
-            
-            if not connected:
-                print("No network connected after forgetting all networks, starting hotspot...", file=sys.stderr)
-                if self.start_hotspot():
-                    print("Hotspot started successfully after forgetting all networks", file=sys.stderr)
-                else:
-                    print("Failed to start hotspot after forgetting all networks", file=sys.stderr)
+            # After forgetting all networks, start hotspot immediately
+            print("All networks forgotten, starting hotspot...", file=sys.stderr)
+            if self.start_hotspot():
+                print("Hotspot started successfully.", file=sys.stderr)
+            else:
+                print("Failed to start hotspot.", file=sys.stderr)
             
             return True
         except subprocess.CalledProcessError as e:
             print(f"Error forgetting networks: {e}", file=sys.stderr)
             print(f"Error output: {e.stderr if hasattr(e, 'stderr') else ''}", file=sys.stderr)
             return False
-    
-    def initialize_on_startup(self):
-        """Initialize the system on startup - perform initial network scan and setup"""
-        print("Initializing WiFi manager on startup...", file=sys.stderr)
-        
-        # Check current connection status
-        connected = self.list_connected()
-        hotspot_status = self.check_hotspot_status()
-        self.list_networks()
-        
-        print(f"Startup status - Connected: {connected is not None}, Hotspot: {hotspot_status.get('running', False)}", file=sys.stderr)
-        
-        # If not connected and hotspot is not running, we need to set up connectivity
-        if not connected and not hotspot_status.get("running", False):
-            print("No connection and no hotspot - starting hotspot for initial setup", file=sys.stderr)
-            if self.start_hotspot():
-                print("Hotspot started successfully on startup", file=sys.stderr)
-            else:
-                print("Failed to start hotspot on startup", file=sys.stderr)
-        
-        # Perform initial network scan regardless of current state
-        # This populates the cache for faster first load
-        print("Performing initial network scan...", file=sys.stderr)
-        
-        # If hotspot is running, we'll temporarily stop it for the scan
-        if hotspot_status.get("running", False) or self.check_hotspot_status().get("running", False):
-            print("Hotspot running, performing cached scan initialization", file=sys.stderr)
-            # Use force refresh to populate initial cache
-            networks = self.list_networks(force_refresh=True)
-        else:
-            # Hotspot not running, scan directly
-            networks = self._scan_networks_internal()
-            # Update cache
-            with self._cache_lock:
-                self._network_cache = networks
-                self._cache_timestamp = datetime.now()
-        
-        print(f"Startup complete - found {len(networks)} networks", file=sys.stderr)
-        
-        # Final status check
-        final_connected = self.list_connected()
-        final_hotspot = self.check_hotspot_status()
-        
-        if final_connected:
-            print(f"Startup complete - connected to '{final_connected['ssid']}'", file=sys.stderr)
-        elif final_hotspot.get("running", False):
-            print(f"Startup complete - hotspot '{final_hotspot.get('ssid', 'unknown')}' running", file=sys.stderr)
-        else:
-            print("Startup complete - no connectivity established", file=sys.stderr)
+
     
     def connect(self, ssid, passphrase=None):
         """Connect to a WiFi network using the binary with proper hotspot management"""
@@ -681,31 +668,13 @@ class WiFiHandler(BaseHTTPRequestHandler):
         try:
             data = json.loads(post_data.decode('utf-8'))
             
-            elif self.path == '/forget-all':
+            if self.path == '/forget-all':
                 success = self.wifi_manager.forget_all()
-                
-                # Get updated status after forgetting
-                connected = self.wifi_manager.list_connected()
-                hotspot_status = self.wifi_manager.check_hotspot_status()
-                
-                response_data = {
-                    "success": success,
-                    "connected": connected,
-                    "hotspot": hotspot_status
-                }
-                
-                if success:
-                    if not connected and hotspot_status.get("running", False):
-                        response_data["message"] = "All networks forgotten - Hotspot started"
-                    elif connected:
-                        response_data["message"] = "All networks forgotten - Still connected to current network"
-                    else:
-                        response_data["message"] = "All networks forgotten"
-                else:
-                    response_data["message"] = "Failed to forget networks"
-                
                 self._set_headers()
-                self.wfile.write(json.dumps(response_data).encode())
+                if success:
+                    time.sleep(2)
+                    self.wifi_manager.start_hotspot()
+                self.wfile.write(json.dumps({"success": success}).encode())
             
             elif self.path == '/forget-network':
                 if 'ssid' not in data:
@@ -715,29 +684,8 @@ class WiFiHandler(BaseHTTPRequestHandler):
                 
                 ssid = data['ssid']
                 success = self.wifi_manager.forget_network(ssid)
-                
-                # Get updated status after forgetting
-                connected = self.wifi_manager.list_connected()
-                hotspot_status = self.wifi_manager.check_hotspot_status()
-                
-                response_data = {
-                    "success": success,
-                    "connected": connected,
-                    "hotspot": hotspot_status
-                }
-                
-                if success:
-                    if not connected and hotspot_status.get("running", False):
-                        response_data["message"] = f"Network '{ssid}' forgotten - Hotspot started"
-                    elif connected:
-                        response_data["message"] = f"Network '{ssid}' forgotten - Still connected to '{connected['ssid']}'"
-                    else:
-                        response_data["message"] = f"Network '{ssid}' forgotten"
-                else:
-                    response_data["message"] = f"Failed to forget network '{ssid}'"
-                
                 self._set_headers()
-                self.wfile.write(json.dumps(response_data).encode())
+                self.wfile.write(json.dumps({"success": success}).encode())
             
             elif self.path == '/connect':
                 if 'ssid' not in data:
@@ -841,10 +789,6 @@ def run_server(server_class=HTTPServer, port=8000, wifi_manager=None):
     
     # Set the wifi_manager in the handler class
     WiFiHandler.wifi_manager = wifi_manager
-    
-    # Initialize WiFi manager on startup
-    if wifi_manager:
-        wifi_manager.initialize_on_startup()
     
     httpd = server_class(server_address, WiFiHandler)
     print(f"Starting server on port {port}...")
@@ -1001,3 +945,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
