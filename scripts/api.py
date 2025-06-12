@@ -566,7 +566,7 @@ class WiFiHandler(BaseHTTPRequestHandler):
             try:
                 with open('index.html', 'r') as f:
                     content = f.read()
-                if touchscreen == 1:
+                if touchscreen == '1':
                     content = content.replace('<!-- kioskboard -->', '<script src="https://furcan.github.io/KioskBoard/kioskboard-aio-2.3.0.min.js">')
                     content = content.replace('<!-- keyboard -->','<script src="./ui/public/static/js/keyboard.js">')
                 self.send_response(200)
@@ -578,7 +578,7 @@ class WiFiHandler(BaseHTTPRequestHandler):
                 self._set_headers(404)
                 self.wfile.write(json.dumps({"error": "index.html not found"}).encode())
         
-        elif self.path == '/list-networks':
+        elif self.path.startswith('/list-networks'):
             print("Getting network list...", file=sys.stderr)
             use_cache = 'use_cache=true' in self.path
 
