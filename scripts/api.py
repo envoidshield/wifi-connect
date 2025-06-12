@@ -564,11 +564,11 @@ class WiFiHandler(BaseHTTPRequestHandler):
         if self.path == '/':
             # Serve the main HTML file
             try:
-                with open('index.html', 'rb') as f:
+                with open('index.html', 'r') as f:
                     content = f.read()
                 if touchscreen == 1:
                     content = content.replace('<!-- kioskboard -->', '<script src="https://furcan.github.io/KioskBoard/kioskboard-aio-2.3.0.min.js">')
-                    content = content.replace('<!-- keyboard -->','script src="./ui/public/static/js/keyboard.js">')
+                    content = content.replace('<!-- keyboard -->','<script src="./ui/public/static/js/keyboard.js">')
             except FileNotFoundError:
                 self.send_response(200)
                 self.send_header('Content-type', 'text/html')
