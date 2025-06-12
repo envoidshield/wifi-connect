@@ -573,7 +573,7 @@ class WiFiHandler(BaseHTTPRequestHandler):
                 self.send_header('Content-type', 'text/html')
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
-                self.wfile.write(content)
+                self.wfile.write(content.encode('utf-8'))
             except FileNotFoundError:
                 self._set_headers(404)
                 self.wfile.write(json.dumps({"error": "index.html not found"}).encode())
