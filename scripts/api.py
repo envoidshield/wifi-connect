@@ -569,7 +569,6 @@ class WiFiHandler(BaseHTTPRequestHandler):
                 if touchscreen == 1:
                     content = content.replace('<!-- kioskboard -->', '<script src="https://furcan.github.io/KioskBoard/kioskboard-aio-2.3.0.min.js">')
                     content = content.replace('<!-- keyboard -->','<script src="./ui/public/static/js/keyboard.js">')
-            except FileNotFoundError:
                 self.send_response(200)
                 self.send_header('Content-type', 'text/html')
                 self.send_header('Access-Control-Allow-Origin', '*')
