@@ -11,7 +11,7 @@ import threading
 import mimetypes
 from datetime import datetime, timedelta
 
-touchscreen = os.getenv('TOUCHSCEEN')
+touchscreen = os.getenv('ENABLE_SURFACE_SUPPORT')
 
 class WiFiConnectWrapper:
     def __init__(self, binary_path="wifi-connect", cache_duration=300):  # 5 minutes default cache
