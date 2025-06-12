@@ -597,27 +597,11 @@ class WiFiHandler(BaseHTTPRequestHandler):
                 networks = self.wifi_manager.list_networks(use_cache=use_cache)
                 cache_info = self.wifi_manager.get_cache_info()
             else:
-                # Hotspot is running
-                connected_clients = self.client_address
-
-                client_ip_in_range = any(
-                    ip.startswith('192.168') for ip in [client['ip'] for client in connected_clients]
-                )
-
-                if client_ip_in_range:
-                    print("Client with IP 192.168.x.x detected, restarting captive portal...", file=sys.stderr)
-                    self.wifi_manager.stop_hotspot()
-                    time.sleep(2)
-                    networks = self.wifi_manager._scan_networks_internal()  # Force rescan
-                    time.sleep(2)
-                    self.wifi_manager.start_hotspot()
-                else:
-                    print("No client with IP 192.168.x.x detected, stopping and restarting hotspot...", file=sys.stderr)
-                    self.wifi_manager.stop_hotspot()
-                    time.sleep(2)
-                    networks = self.wifi_manager._scan_networks_internal()  # Force rescan
-                    time.sleep(2)
-                    self.wifi_manager.start_hotspot()
+                self.wifi_manager.stop_hotspot()
+                time.sleep(2)
+                networks = self.wifi_manager._scan_networks_internal()  # Force rescan
+                time.sleep(2)
+                self.wifi_manager.start_hotspot()
 
             self._set_headers()
             self.wfile.write(json.dumps({
