@@ -599,7 +599,7 @@ class WiFiHandler(BaseHTTPRequestHandler):
             else:
                 self.wifi_manager.stop_hotspot()
                 time.sleep(2)
-                networks = self.wifi_manager._scan_networks_internal()  # Force rescan
+                networks = self.wifi_manager.list_networks(use_cache=False) # Force rescan
                 time.sleep(2)
                 self.wifi_manager.start_hotspot()
 
