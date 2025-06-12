@@ -11,6 +11,8 @@ import threading
 import mimetypes
 from datetime import datetime, timedelta
 
+touchscreen = os.getenv('TOUCHSCEEN')
+
 class WiFiConnectWrapper:
     def __init__(self, binary_path="wifi-connect", cache_duration=300):  # 5 minutes default cache
         """Initialize with path to the wifi-connect binary and cache duration in seconds"""
@@ -152,33 +154,19 @@ class WiFiConnectWrapper:
                     else:
                         print("Hotspot restarted successfully", file=sys.stderr)
     
-    def list_networks(self, force_refresh=False):
+    def list_networks(self, use_cache=False):
         """List available WiFi networks, using cache when hotspot is running"""
-        hotspot_status = self.check_hotspot_status()
+        networks = self._scan_networks_internal()
+        if use_cache and self._network_cache is not None:
+            # Use cached networks if available
+            return self._network_cache
         
-        if hotspot_status.get("running", False):
-            # Hotspot is running - use cached data
-            print("Hotspot is running, using cached network list", file=sys.stderr)
-            
-            # Check if we have valid cached data
-            if force_refresh or not self._is_cache_valid():
-                # Need to refresh cache
-                return self._refresh_network_cache(force_rescan=force_refresh)
-            else:
-                # Use existing cache
-                print(f"Using cached network list ({len(self._network_cache or [])} networks)", file=sys.stderr)
-                return self._network_cache or []
-        else:
-            # Hotspot is not running - scan directly
-            print("Hotspot is not running, scanning networks directly", file=sys.stderr)
-            networks = self._scan_networks_internal()
-            
-            # Update cache even when hotspot is not running
-            with self._cache_lock:
-                self._network_cache = networks
-                self._cache_timestamp = datetime.now()
-            
-            return networks
+        # Update cache even when hotspot is not running
+        with self._cache_lock:
+            self._network_cache = networks
+            self._cache_timestamp = datetime.now()
+        
+        return networks
     
     def get_cache_info(self):
         """Get information about the network cache"""
@@ -565,8 +553,7 @@ class WiFiConnectWrapper:
             return connection_successful
 
 class WiFiHandler(BaseHTTPRequestHandler):
-    wifi_manager = None
-    
+    wifi_manager = None  
     def _set_headers(self, status_code=200):
         self.send_response(status_code)
         self.send_header('Content-type', 'application/json')
@@ -579,6 +566,10 @@ class WiFiHandler(BaseHTTPRequestHandler):
             try:
                 with open('index.html', 'rb') as f:
                     content = f.read()
+                if touchscreen == 1:
+                    content = content.replace('<!-- kioskboard -->', '<script src="https://furcan.github.io/KioskBoard/kioskboard-aio-2.3.0.min.js">')
+                    content = content.replace('<!-- keyboard -->','script src="./ui/public/static/js/keyboard.js">')
+            except FileNotFoundError:
                 self.send_response(200)
                 self.send_header('Content-type', 'text/html')
                 self.send_header('Access-Control-Allow-Origin', '*')
@@ -590,16 +581,51 @@ class WiFiHandler(BaseHTTPRequestHandler):
         
         elif self.path == '/list-networks':
             print("Getting network list...", file=sys.stderr)
-            # Check if force refresh is requested
-            force_refresh = 'refresh=true' in self.path or 'force=true' in self.path
-            networks = self.wifi_manager.list_networks(force_refresh=force_refresh)
-            cache_info = self.wifi_manager.get_cache_info()
+            use_cache = 'use_cache=true' in self.path
+
+            # Check if hotspot is running
+            hotspot_status = self.wifi_manager.check_hotspot_status()
+            is_running = hotspot_status.get('running', False)
+
+            networks = []
+            cache_info = {}
+
+            if use_cache: 
+                networks = self.wifi_manager.list_networks(use_cache=True)
+                cache_info = self.wifi_manager.get_cache_info()
+            elif not is_running:
+                # If the hotspot is not running, simply list networks (new logic)
+                networks = self.wifi_manager.list_networks(use_cache=use_cache)
+                cache_info = self.wifi_manager.get_cache_info()
+            else:
+                # Hotspot is running
+                connected_clients = self.client_address
+
+                client_ip_in_range = any(
+                    ip.startswith('192.168') for ip in [client['ip'] for client in connected_clients]
+                )
+
+                if client_ip_in_range:
+                    print("Client with IP 192.168.x.x detected, restarting captive portal...", file=sys.stderr)
+                    self.wifi_manager.stop_hotspot()
+                    time.sleep(2)
+                    networks = self.wifi_manager._scan_networks_internal()  # Force rescan
+                    time.sleep(2)
+                    self.wifi_manager.start_hotspot()
+                else:
+                    print("No client with IP 192.168.x.x detected, stopping and restarting hotspot...", file=sys.stderr)
+                    self.wifi_manager.stop_hotspot()
+                    time.sleep(2)
+                    networks = self.wifi_manager._scan_networks_internal()  # Force rescan
+                    time.sleep(2)
+                    self.wifi_manager.start_hotspot()
+
             self._set_headers()
             self.wfile.write(json.dumps({
                 "networks": networks,
                 "cache_info": cache_info
             }).encode())
-        
+            
         elif self.path == '/list-networks?refresh=true' or self.path == '/list-networks?force=true':
             print("Force refreshing network list...", file=sys.stderr)
             networks = self.wifi_manager.list_networks(force_refresh=True)
