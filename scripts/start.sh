@@ -48,7 +48,7 @@ check_api_ping() {
 
 echo "starting start script..."
 sleep 10
-export SSID="EnVoid-connect-${RESIN_DEVICE_UUID:0:5}"
+export SSID="Envoid-connect-${RESIN_DEVICE_UUID:0:5}"
 echo "export PORTAL_SSID='$SSID'" >> ~/.bashrc && source ~/.bashrc
 # Choose a condition for running WiFi Connect according to your use case:
 
