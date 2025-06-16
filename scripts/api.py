@@ -567,7 +567,7 @@ class WiFiHandler(BaseHTTPRequestHandler):
                 with open('index.html', 'r') as f:
                     content = f.read()
                 if touchscreen == '1':
-                    content = content.replace('<!-- kioskboard -->', '<script src="./ui/public/static/js/kioskboard-aio-2.3.0.min.js"></script>')
+                    content = content.replace('<!-- kioskboard -->', '<script src="./ui/public/static/js/kioskboard-aio.min.js"></script>')
                     content = content.replace('<!-- keyboard -->', '<script src="./ui/public/static/js/keyboard.js"></script>')
                 self.send_response(200)
                 self.send_header('Content-type', 'text/html')
