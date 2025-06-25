@@ -231,7 +231,7 @@ impl NetworkCommandHandler {
             match wifi_device.connect(access_point, &credentials) {
                 Ok((connection, state)) => {
                     if state == ConnectionState::Activated {
-                        match wait_for_connectivity(&self.manager, 20) {
+                        match wait_for_connectivity(&self.manager, 200000) {
                             Ok(has_connectivity) => {
                                 if has_connectivity {
                                     info!("Internet connectivity established");

@@ -24,6 +24,9 @@ pub struct Config {
     pub activity_timeout: u64,
     pub ui_directory: PathBuf,
     pub forget_all: bool,
+    pub no_dhcp_gateway: bool,
+    pub no_dhcp_dns: bool,
+    pub no_dhcp_router_option: bool,
 }
 
 pub fn get_config() -> Config {
@@ -116,6 +119,24 @@ pub fn get_config() -> Config {
                 .help("Forget all saved WiFi networks and exit")
                 .takes_value(false),
         )
+        .arg(
+            Arg::with_name("no-dhcp-gateway")
+                .long("no-dhcp-gateway")
+                .help("Do not advertise a router (gateway) option via DHCP")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("no-dhcp-dns")
+                .long("no-dhcp-dns")
+                .help("Do not provide DNS server information via DHCP (disables wildcard DNS redirection)")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("no-dhcp-router-option")
+                .long("no-dhcp-router-option")
+                .help("Explicitly set empty router option via DHCP (prevents auto-detection of gateway)")
+                .takes_value(false),
+        )
         .get_matches();
 
     let interface: Option<String> = matches.value_of("portal-interface").map_or_else(
@@ -165,6 +186,9 @@ pub fn get_config() -> Config {
     let ui_directory = get_ui_directory(matches.value_of("ui-directory"));
     let forget_all = matches.is_present("forget-all");
 
+    let no_dhcp_gateway = matches.is_present("no-dhcp-gateway");
+    let no_dhcp_dns = matches.is_present("no-dhcp-dns");
+    let no_dhcp_router_option = matches.is_present("no-dhcp-router-option");
 
     Config {
         interface,
@@ -176,6 +200,9 @@ pub fn get_config() -> Config {
         activity_timeout,
         ui_directory,
         forget_all,
+        no_dhcp_gateway,
+        no_dhcp_dns,
+        no_dhcp_router_option,
     }
 }
 
