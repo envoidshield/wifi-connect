@@ -100,7 +100,7 @@ const App = () => {
 				brand={
 					<NavbarBrand>
 						<Logo src={logo} alt="logo" />
-						<BrandText>IronPort</BrandText>
+						<BrandText>EnVoid</BrandText>
 					</NavbarBrand>
 				}
 			/>

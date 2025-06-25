@@ -48,7 +48,8 @@ check_api_ping() {
 
 echo "starting start script..."
 sleep 10
-export PORTAL_SSID="EnVoid-connect-${RESIN_DEVICE_UUID:0:5}"
+export SSID="Envoid-connect-${RESIN_DEVICE_UUID:0:5}"
+echo "export PORTAL_SSID='$SSID'" >> ~/.bashrc && source ~/.bashrc
 # Choose a condition for running WiFi Connect according to your use case:
 
 # 1. Is there a default gateway?
@@ -91,11 +92,17 @@ check_connection() {
 check_connection
 connection=$? 
 
+
 if [ "$connection" -eq 0 ]; then
-    printf 'Skipping WiFi Connect\n'
-    sleep infinity
+    printf 'Starting API\n'
 else
-    printf 'Starting WiFi Connect\n'
-    ./wifi-connect
+    printf 'Starting hotspot \n'
+    ./wifi-connect --start-hotspot &
+    sleep 2
+    ./wifi-connect --stop-hotspot
+    sleep 2
+    ./wifi-connect --start-hotspot &
+    sleep 1
 fi
 
+python3 api.py --binary "./wifi-connect" --serve --port 8080

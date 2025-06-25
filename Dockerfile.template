@@ -27,7 +27,8 @@ RUN cargo build --release --verbose
 # Stage 2: Runner
 FROM balenalib/$BALENA_ARCH-debian
 
-RUN install_packages dnsmasq wireless-tools
+RUN apt-get update && apt-get upgrade -y && \
+  install_packages dnsmasq wireless-tools python3
 
 # use latest version. If specific version is required, it should be provided as vX.Y.Z, e.g v4.11.37
 ARG VERSION="latest"
@@ -59,7 +60,10 @@ WORKDIR /usr/src/app
 COPY --from=builder /myapp/target/release/wifi-connect .
 
 COPY scripts/start.sh .
+COPY scripts/api.py .
 COPY ui/build ui
+COPY ui/public/static ui/public/static
+COPY index.html .
 COPY ui/build/index.html ui/index
 
 CMD ["bash", "start.sh"]

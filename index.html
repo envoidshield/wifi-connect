@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WiFi Manager</title>
+    <link rel="stylesheet" href="./ui/public/static/css/all.min.css">
+    <link rel="stylesheet" href="./ui/public/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+          <img src="./ui/public/static/logo.png" alt="logo"  width="170px" height="170px" >
+            <p>Connect to available WiFi networks</p>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('available')">
+                <i class="fas fa-search"></i> Available
+            </button>
+            <button class="tab" onclick="showTab('connected')">
+                <i class="fas fa-link"></i> Connected
+            </button>
+            <button class="tab" onclick="showTab('saved')">
+                <i class="fas fa-bookmark"></i> Saved
+            </button>
+        </div>
+
+        <!-- Available Networks Tab -->
+        <div id="available" class="tab-content active">
+            <div class="controls">
+                <button class="btn btn-primary" onclick="refreshNetworks()">
+                    <i class="fas fa-sync-alt"></i> Scan Networks
+                </button>
+            </div>
+            <ul class="network-list" id="available-networks">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </ul>
+        </div>
+
+        <!-- Connected Network Tab -->
+        <div id="connected" class="tab-content">
+            <div class="controls">
+                <button class="btn btn-primary" onclick="refreshConnected()">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+            </div>
+            <div id="connected-network">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Saved Networks Tab -->
+        <div id="saved" class="tab-content">
+            <div class="controls">
+                <button class="btn btn-primary" onclick="refreshSaved()">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+                <button class="btn btn-danger" onclick="forgetAllNetworks()">
+                    <i class="fas fa-trash"></i> Forget All
+                </button>
+            </div>
+            <ul class="network-list" id="saved-networks">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Connect Modal -->
+    <div class="modal" id="connect-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Connect to Network</h3>
+                <button class="close" onclick="closeModal()">&times;</button>
+            </div>
+            <form id="connect-form">
+                <div class="form-group">
+                    <label>Network Name:</label>
+                    <input type="text" id="connect-ssid" class="form-control" readonly>
+                </div>
+                <div class="form-group" id="password-group">
+                    <label>Password:</label>
+                    <input type="password" id="connect-password" 
+                    class="form-control js-kioskboard-input"
+                    data-kioskboard-type="all"
+                    data-kioskboard-specialcharacters="true"
+                    placeholder="Enter network password">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-success">Connect</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // Configuration
+        const API_BASE = '';
+        let currentTab = 'available';
+        let useCache = true;
+        // Initialize app
+        document.addEventListener('DOMContentLoaded', function() {
+            refreshNetworks();
+        });
+
+        function showTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(tabName).classList.add('active');
+
+            currentTab = tabName;
+
+            // Load content based on tab
+            switch(tabName) {
+                case 'available':
+                    refreshNetworks();
+                    break;
+                case 'connected':
+                    refreshConnected();
+                    break;
+                case 'saved':
+                    refreshSaved();
+                    break;
+            }
+        }
+
+        async function refreshNetworks() {
+            const container = document.getElementById('available-networks');
+            container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+            try {
+                let url = './list-networks';
+                
+                if (useCache) {
+                    url += '?use_cache=true';
+                    useCache = false;
+                } else {
+                    url += '?use_cache=false';
+                    showToast('Hotspot will restart', 'error')
+                }
+
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('Failed to fetch networks');
+                
+                const data = await response.json();
+                renderAvailableNetworks(data.networks || []);
+            } catch (error) {
+                console.error('Error:', error);
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p>Error loading networks. Please try again.</p>
+                    </div>
+                `;
+                showToast('Error loading networks', 'error');
+            }
+        }
+
+        async function refreshConnected() {
+            const container = document.getElementById('connected-network');
+            container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+            try {
+                const response = await fetch(`list-connected`);
+                if (!response.ok) throw new Error('Failed to fetch connected network');
+                
+                const data = await response.json();
+                renderConnectedNetwork(data.connected);
+            } catch (error) {
+                console.error('Error:', error);
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-wifi-slash"></i>
+                        <p>Error loading connection status</p>
+                    </div>
+                `;
+                showToast('Error loading connection status', 'error');
+            }
+        }
+
+        async function refreshSaved() {
+            const container = document.getElementById('saved-networks');
+            container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+            try {
+                const response = await fetch(`list-saved`);
+                if (!response.ok) throw new Error('Failed to fetch saved networks');
+                
+                const data = await response.json();
+                renderSavedNetworks(data.saved_networks || []);
+            } catch (error) {
+                console.error('Error:', error);
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-bookmark"></i>
+                        <p>Error loading saved networks</p>
+                    </div>
+                `;
+                showToast('Error loading saved networks', 'error');
+            }
+        }
+
+        function renderAvailableNetworks(networks) {
+            const container = document.getElementById('available-networks');
+            
+            if (!networks || networks.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-search"></i>
+                        <p>No networks found. Try refreshing.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = networks.map(network => `
+                <li class="network-item" onclick="showConnectModal('${escapeHtml(network.ssid)}', '${escapeHtml(network.security)}')">
+                    <div class="network-info">
+                        <div class="network-name">
+                            <i class="fas fa-wifi"></i> 
+                            <span>${escapeHtml(network.ssid)}</span>
+                            <span class="badge ${getSecurityBadgeClass(network.security)}">
+                                <i class="fas fa-${getSecurityIcon(network.security)}"></i>
+                                ${getSecurityLabel(network.security)}
+                            </span>
+                        </div>
+                        <div class="network-details">
+                            Security: ${escapeHtml(network.security)}
+                        </div>
+                    </div>
+                </li>
+            `).join('');
+        }
+
+        function renderConnectedNetwork(network) {
+            const container = document.getElementById('connected-network');
+            
+            if (!network) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-wifi-slash"></i>
+                        <p>No network connected</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="network-item connected">
+                    <div class="network-info">
+                        <div class="network-name">
+                            <i class="fas fa-wifi"></i> 
+                            <span>${escapeHtml(network.ssid)}</span>
+                            <span class="badge badge-success">Connected</span>
+                        </div>
+                        <div class="network-details">
+                            Interface: ${escapeHtml(network.interface)}<br>
+                            Security: ${escapeHtml(network.security)}<br>
+                            Signal: ${network.signal_strength}%
+                            ${network.ip_address ? `<br>IP: ${escapeHtml(network.ip_address)}` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderSavedNetworks(networks) {
+            const container = document.getElementById('saved-networks');
+            
+            if (!networks || networks.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-bookmark"></i>
+                        <p>No saved networks found</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = networks.map(network => `
+                <li class="network-item">
+                    <div class="network-info">
+                        <div class="network-name">
+                            <i class="fas fa-bookmark"></i> ${escapeHtml(network.ssid)}
+                        </div>
+                        <div class="network-details">
+                            Security: ${escapeHtml(network.security)}
+                        </div>
+                    </div>
+                    <div class="network-actions">
+                        <button class="btn btn-success" onclick="event.stopPropagation(); connectToSaved('${escapeHtml(network.ssid)}')">
+                            <i class="fas fa-link"></i> Connect
+                        </button>
+                        <button class="btn btn-danger" onclick="event.stopPropagation(); forgetNetwork('${escapeHtml(network.ssid)}')">
+                            <i class="fas fa-trash"></i> Forget
+                        </button>
+                    </div>
+                </li>
+            `).join('');
+        }
+
+        function showConnectModal(ssid, security) {
+            document.getElementById('connect-ssid').value = ssid;
+            document.getElementById('connect-password').value = '';
+            
+            const passwordGroup = document.getElementById('password-group');
+            if (security === 'none' || security === 'open' || security === '') {
+                passwordGroup.style.display = 'none';
+            } else {
+                passwordGroup.style.display = 'block';
+            }
+            
+            document.getElementById('connect-modal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('connect-modal').style.display = 'none';
+        }
+
+        document.getElementById('connect-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const ssid = document.getElementById('connect-ssid').value;
+            const password = document.getElementById('connect-password').value;
+            
+            closeModal();
+            
+            try {
+                const response = await fetch(`connect`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        ssid: ssid,
+                        passphrase: password || undefined
+                    })
+                });
+                
+                if (!response.ok) throw new Error('Connection failed');
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast(`Connected to ${ssid}`, 'success');
+                    setTimeout(() => refreshConnected(), 2000);
+                } else {
+                    showToast(`Failed to connect to ${ssid}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showToast(`Error connecting to ${ssid}`, 'error');
+            }
+        });
+
+        async function connectToSaved(ssid) {
+            try {
+                const response = await fetch(`connect`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        ssid: ssid
+                        // No passphrase needed for saved networks
+                    })
+                });
+                
+                if (!response.ok) throw new Error('Connection failed');
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast(`Connected to ${ssid}`, 'success');
+                    setTimeout(() => refreshConnected(), 2000);
+                } else {
+                    showToast(`Failed to connect to ${ssid}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showToast(`Error connecting to ${ssid}`, 'error');
+            }
+        }
+
+        async function forgetNetwork(ssid) {
+            if (!confirm(`Are you sure you want to forget "${ssid}"?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`forget-network`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        ssid: ssid
+                    })
+                });
+                
+                if (!response.ok) throw new Error('Failed to forget network');
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast(`Forgot network "${ssid}"`, 'success');
+                    refreshSaved();
+                } else {
+                    showToast(`Failed to forget "${ssid}"`, 'error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showToast(`Error forgetting "${ssid}"`, 'error');
+            }
+        }
+
+        async function forgetAllNetworks() {
+            if (!confirm('Are you sure you want to forget ALL saved networks? This cannot be undone.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`forget-all`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({})
+                });
+                
+                if (!response.ok) throw new Error('Failed to forget networks');
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast('All networks forgotten', 'success');
+                    refreshSaved();
+                } else {
+                    showToast('Failed to forget all networks', 'error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showToast('Error forgetting all networks', 'error');
+            }
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast ${type}`;
+            toast.classList.add('show');
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function getSecurityBadgeClass(security) {
+            if (!security || security === 'none' || security === 'open') {
+                return 'badge-warning';
+            }
+            return 'badge-info';
+        }
+
+        function getSecurityIcon(security) {
+            if (!security || security === 'none' || security === 'open') {
+                return 'unlock';
+            }
+            return 'lock';
+        }
+
+        function getSecurityLabel(security) {
+            if (!security || security === 'none' || security === 'open') {
+                return 'Open';
+            }
+            return 'Secured';
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('connect-modal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+
+        // Prevent zoom on iOS when focusing input fields
+        document.addEventListener('touchstart', function() {}, {passive: true});
+    </script>
+    <!-- kioskboard -->
+    <!-- keyboard -->
+</body>
+</html>

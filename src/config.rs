@@ -24,7 +24,18 @@ pub struct Config {
     pub activity_timeout: u64,
     pub ui_directory: PathBuf,
     pub forget_all: bool,
+    pub list_networks: bool,
+    pub list_connected: bool,
+    pub list_saved: bool,
+    pub forget_network: Option<String>,
+    pub connect: Option<(String, String)>, // (SSID, passphrase)
+    // New hotspot management commands
+    pub start_hotspot: bool,
+    pub stop_hotspot: bool,
+    pub check_hotspot: bool,
+    pub restart_hotspot: bool,
 }
+
 
 pub fn get_config() -> Config {
     let matches = App::new(crate_name!())
@@ -116,6 +127,70 @@ pub fn get_config() -> Config {
                 .help("Forget all saved WiFi networks and exit")
                 .takes_value(false),
         )
+        .arg(
+            Arg::with_name("list-networks")
+                .long("list-networks")
+                .help("List all available WiFi networks and exit")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("list-connected")
+                .long("list-connected")
+                .help("List currently connected WiFi network and exit")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("list-saved")
+                .long("list-saved")
+                .help("List all saved WiFi networks and exit")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("forget-network")
+                .long("forget-network")
+                .value_name("ssid")
+                .help("Forget a specific WiFi network by SSID and exit")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("connect")
+                .long("connect")
+                .value_name("ssid")
+                .help("Connect to a specific WiFi network")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("passphrase")
+                .long("passphrase")
+                .value_name("passphrase")
+                .help("Passphrase for the WiFi network to connect to")
+                .takes_value(true),
+        )
+        // New hotspot management arguments
+        .arg(
+            Arg::with_name("start-hotspot")
+                .long("start-hotspot")
+                .help("Start the WiFi hotspot and exit")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("stop-hotspot")
+                .long("stop-hotspot")
+                .help("Stop the WiFi hotspot and exit")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("check-hotspot")
+                .long("check-hotspot")
+                .help("Check hotspot status and exit")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("restart-hotspot")
+                .long("restart-hotspot")
+                .help("Restart the WiFi hotspot and exit")
+                .takes_value(false),
+        )
         .get_matches();
 
     let interface: Option<String> = matches.value_of("portal-interface").map_or_else(
@@ -164,7 +239,22 @@ pub fn get_config() -> Config {
 
     let ui_directory = get_ui_directory(matches.value_of("ui-directory"));
     let forget_all = matches.is_present("forget-all");
+    let list_networks = matches.is_present("list-networks");
+    let list_connected = matches.is_present("list-connected");
+    let list_saved = matches.is_present("list-saved");
+    let forget_network = matches.value_of("forget-network").map(|s| s.to_string());
+    let connect = if let Some(ssid) = matches.value_of("connect") {
+        let passphrase = matches.value_of("passphrase").unwrap_or("").to_string();
+        Some((ssid.to_string(), passphrase))
+    } else {
+        None
+    };
 
+    // New hotspot command flags
+    let start_hotspot = matches.is_present("start-hotspot");
+    let stop_hotspot = matches.is_present("stop-hotspot");
+    let check_hotspot = matches.is_present("check-hotspot");
+    let restart_hotspot = matches.is_present("restart-hotspot");
 
     Config {
         interface,
@@ -176,6 +266,15 @@ pub fn get_config() -> Config {
         activity_timeout,
         ui_directory,
         forget_all,
+        list_networks,
+        list_connected,
+        list_saved,
+        forget_network,
+        connect,
+        start_hotspot,
+        stop_hotspot,
+        check_hotspot,
+        restart_hotspot,
     }
 }
 
