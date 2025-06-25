@@ -110,8 +110,7 @@ check_connection() {
 check_connection
 connection=$? 
 
-
-if [ "$connection" -eq 0 ]; then
+if [ "$connection" -eq 0 ] && ! { [ -n "${WIFI_DIRECT+x}" ] && [ "${WIFI_DIRECT,,}" == "true" ]; }; then
     printf 'Starting API\n'
 else
     printf 'Starting WiFi Connect\n'
