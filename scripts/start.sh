@@ -107,6 +107,22 @@ check_connection() {
     return 1
 }
 
+# Check if the WIFI_DIRECT file exists in /data/
+WIFI_DIRECT_FILE="/data/WIFI_DIRECT"
+
+if [ ! -f "$WIFI_DIRECT_FILE" ]; then
+    # If the file doesn't exist, create it and set a default value (e.g., false)
+    echo "false" > "$WIFI_DIRECT_FILE"
+    echo "File '$WIFI_DIRECT_FILE' created with default value 'false'."
+else
+    echo "File '$WIFI_DIRECT_FILE' already exists."
+fi
+
+# Read the WIFI_DIRECT value from the file
+WIFI_DIRECT=$(cat "$WIFI_DIRECT_FILE")
+
+echo "WIFI_DIRECT is set to: $WIFI_DIRECT"
+
 check_connection
 connection=$? 
 

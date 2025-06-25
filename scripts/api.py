@@ -21,6 +21,12 @@ class WiFiConnectWrapper:
         self._network_cache = None
         self._cache_timestamp = None
         self._cache_lock = threading.Lock()
+        self.onkey_enabled = False
+
+    def toggle_onkey(self):
+        """Toggle the onkey feature"""
+        self.onkey_enabled = not self.onkey_enabled
+        print(f"OnKey is {'enabled' if self.onkey_enabled else 'disabled'}")
     
     def check_hotspot_status(self):
         """Check if hotspot is currently running"""
@@ -577,7 +583,12 @@ class WiFiHandler(BaseHTTPRequestHandler):
             except FileNotFoundError:
                 self._set_headers(404)
                 self.wfile.write(json.dumps({"error": "index.html not found"}).encode())
-        
+
+        elif self.path == '/get-wifi-direct':
+            wifi_direct_value = get_wifi_direct_value()
+            self._set_headers()
+            self.wfile.write(json.dumps({"value": wifi_direct_value}).encode())
+
         elif self.path.startswith('/list-networks'):
             print("Getting network list...", file=sys.stderr)
             use_cache = 'use_cache=true' in self.path
@@ -776,7 +787,24 @@ class WiFiHandler(BaseHTTPRequestHandler):
                 self.wifi_manager.clear_cache()
                 self._set_headers()
                 self.wfile.write(json.dumps({"success": True}).encode())
-            
+
+            elif self.path == '/set-wifi-direct':
+                if 'value' not in data:
+                    self._set_headers(400)
+                    self.wfile.write(json.dumps({"error": "Value is required"}).encode())
+                    exit()
+                    return
+                
+                value = str(data['value']).lower()
+                if value not in ['true', 'false']:
+                    self._set_headers(400)
+                    self.wfile.write(json.dumps({"error": "Invalid value. Must be 'true' or 'false'"}).encode())
+                    return
+                
+                set_wifi_direct_value(value)
+                self._set_headers()
+                self.wfile.write(json.dumps({"success": True, "value": value}).encode())
+
             else:
                 self._set_headers(404)
                 self.wfile.write(json.dumps({"error": "Not found"}).encode())
@@ -791,6 +819,20 @@ class WiFiHandler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
+
+def get_wifi_direct_value(file_path="/data/WIFI_DIRECT"):
+    """Read the current value of WIFI_DIRECT from the file"""
+    if os.path.exists(file_path):
+        with open(file_path, 'r') as f:
+            return f.read().strip()
+    else:
+        return "false"
+
+def set_wifi_direct_value(value, file_path="/data/WIFI_DIRECT"):
+    """Write a new value to the WIFI_DIRECT file"""
+    with open(file_path, 'w') as f:
+        f.write(str(value).lower())
+    print(f"WIFI_DIRECT set to: {value}")
 
 def run_server(server_class=HTTPServer, port=8000, wifi_manager=None):
     """Start the HTTP server"""

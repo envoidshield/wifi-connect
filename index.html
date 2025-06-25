@@ -14,6 +14,12 @@
             <p>Connect to available WiFi networks</p>
         </div>
 
+        <div class="additional-section">
+            <button id="wifi-direct-toggle" class="btn btn-primary" onclick="toggleWiFiDirect()">
+                <i class="fas fa-toggle-off"></i> WIFI_DIRECT: <span id="wifi-direct-status">false</span>
+            </button>
+        </div>
+
         <div class="tabs">
             <button class="tab active" onclick="showTab('available')">
                 <i class="fas fa-search"></i> Available
@@ -111,6 +117,7 @@
         // Initialize app
         document.addEventListener('DOMContentLoaded', function() {
             refreshNetworks();
+            fetchWiFiDirectStatus();
         });
 
         function showTab(tabName) {
@@ -499,6 +506,60 @@
                 return 'Open';
             }
             return 'Secured';
+        }
+        
+        async function toggleWiFiDirect() {
+            try {
+                const newValue = !wifiDirect;
+                const response = await fetch(`set-wifi-direct`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        value: newValue.toString()
+                    })
+                });
+                
+                if (!response.ok) throw new Error('Failed to toggle WIFI_DIRECT');
+                
+                const data = await response.json();
+                wifiDirect = data.value === 'true';
+                updateWiFiDirectUI(wifiDirect);
+            } catch (error) {
+                console.error('Error:', error);
+                showToast('Error toggling WIFI_DIRECT', 'error');
+            }
+        }
+
+        function updateWiFiDirectUI(isWifiDirect) {
+            const toggleButton = document.getElementById('wifi-direct-toggle');
+            const wifiDirectStatus = document.getElementById('wifi-direct-status');
+            const wifiDirectMessage = document.getElementById('wifi-direct-message');
+            const availableTabContent = document.getElementById('available');
+
+            if (isWifiDirect) {
+                toggleButton.innerHTML = `<i class="fas fa-toggle-on"></i> WIFI_DIRECT: <span id="wifi-direct-status">true</span>`;
+                wifiDirectMessage.style.display = 'block';
+                availableTabContent.style.display = 'none';
+            } else {
+                toggleButton.innerHTML = `<i class="fas fa-toggle-off"></i> WIFI_DIRECT: <span id="wifi-direct-status">false</span>`;
+                wifiDirectMessage.style.display = 'none';
+                availableTabContent.style.display = 'block';
+            }
+        }
+        async function fetchWiFiDirectStatus() {
+            try {
+                const response = await fetch(`get-wifi-direct`);
+                if (!response.ok) throw new Error('Failed to fetch WIFI_DIRECT status');
+                
+                const data = await response.json();
+                wifiDirect = data.value === 'true';
+                updateWiFiDirectUI(wifiDirect);
+            } catch (error) {
+                console.error('Error:', error);
+                showToast('Error fetching WIFI_DIRECT status', 'error');
+            }
         }
 
         // Close modal when clicking outside
