@@ -34,6 +34,9 @@ pub struct Config {
     pub stop_hotspot: bool,
     pub check_hotspot: bool,
     pub restart_hotspot: bool,
+    pub no_dhcp_gateway: bool,
+    pub no_dhcp_dns: bool,
+    pub no_dhcp_router_option: bool,
 }
 
 
@@ -189,6 +192,21 @@ pub fn get_config() -> Config {
             Arg::with_name("restart-hotspot")
                 .long("restart-hotspot")
                 .help("Restart the WiFi hotspot and exit")
+            Arg::with_name("no-dhcp-gateway")
+                .long("no-dhcp-gateway")
+                .help("Do not advertise a router (gateway) option via DHCP")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("no-dhcp-dns")
+                .long("no-dhcp-dns")
+                .help("Do not provide DNS server information via DHCP (disables wildcard DNS redirection)")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("no-dhcp-router-option")
+                .long("no-dhcp-router-option")
+                .help("Explicitly set empty router option via DHCP (prevents auto-detection of gateway)")
                 .takes_value(false),
         )
         .get_matches();
@@ -255,6 +273,9 @@ pub fn get_config() -> Config {
     let stop_hotspot = matches.is_present("stop-hotspot");
     let check_hotspot = matches.is_present("check-hotspot");
     let restart_hotspot = matches.is_present("restart-hotspot");
+    let no_dhcp_gateway = matches.is_present("no-dhcp-gateway");
+    let no_dhcp_dns = matches.is_present("no-dhcp-dns");
+    let no_dhcp_router_option = matches.is_present("no-dhcp-router-option");
 
     Config {
         interface,
@@ -275,6 +296,9 @@ pub fn get_config() -> Config {
         stop_hotspot,
         check_hotspot,
         restart_hotspot,
+        no_dhcp_gateway,
+        no_dhcp_dns,
+        no_dhcp_router_option,
     }
 }
 

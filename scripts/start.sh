@@ -48,8 +48,20 @@ check_api_ping() {
 
 echo "starting start script..."
 sleep 10
-export SSID="Envoid-connect-${RESIN_DEVICE_UUID:0:5}"
-echo "export PORTAL_SSID='$SSID'" >> ~/.bashrc && source ~/.bashrc
+
+# Set SSID based on mode
+if [[ -n "${WIFI_DIRECT+x}" && "${WIFI_DIRECT,,}" == "true" ]]; then
+    export PORTAL_SSID="EnVoid-Direct-${RESIN_DEVICE_UUID:0:5}" >> ~/.bashrc && source ~/.bashrc
+
+    echo "WIFI_DIRECT mode: SSID set to $PORTAL_SSID" >> ~/.bashrc && source ~/.bashrc
+
+else
+    export PORTAL_SSID="EnVoid-Connect-${RESIN_DEVICE_UUID:0:5}" >> ~/.bashrc && source ~/.bashrc
+
+    echo "Standard mode: SSID set to $PORTAL_SSID" >> ~/.bashrc && source ~/.bashrc
+
+fi
+
 # Choose a condition for running WiFi Connect according to your use case:
 
 # 1. Is there a default gateway?
@@ -69,6 +81,12 @@ check_connection() {
     
     if [ -n "$SSID" ]; then
         echo "Connected to WiFi network: $SSID."
+        
+        # WIFI_DIRECT mode overrides connectivity check
+        if [[ -n "${WIFI_DIRECT+x}" && "${WIFI_DIRECT,,}" == "true" ]]; then
+            echo "WIFI_DIRECT mode enabled - skipping connectivity check"
+            return 0;
+        fi
         
         # Check if connected to Balena Cloud
         if [[ -n "${CHECK_CONNECTIVITY+x}" && "${CHECK_CONNECTIVITY,,}" == "false" ]]; then
@@ -96,12 +114,32 @@ connection=$?
 if [ "$connection" -eq 0 ]; then
     printf 'Starting API\n'
 else
-    printf 'Starting hotspot \n'
-    ./wifi-connect --start-hotspot &
-    sleep 2
-    ./wifi-connect --stop-hotspot
-    sleep 2
-    ./wifi-connect --start-hotspot &
+    printf 'Starting WiFi Connect\n'
+
+    WIFI_CONNECT_ARGS=""
+
+    # WIFI_DIRECT mode enables all direct connection options
+    if [[ -n "${WIFI_DIRECT+x}" && "${WIFI_DIRECT,,}" == "true" ]]; then
+        echo "WIFI_DIRECT mode enabled - activating CarPlay-style direct connection"
+        WIFI_CONNECT_ARGS+=" --no-dhcp-gateway"
+        WIFI_CONNECT_ARGS+=" --no-dhcp-router-option"
+        WIFI_CONNECT_ARGS+=" --activity-timeout 0"
+    else
+        # Honour individual env vars for suppressing DHCP options
+        if [[ -n "${NO_DHCP_GATEWAY+x}" && "${NO_DHCP_GATEWAY,,}" == "true" ]]; then
+            WIFI_CONNECT_ARGS+=" --no-dhcp-gateway"
+        fi
+
+        if [[ -n "${NO_DHCP_DNS+x}" && "${NO_DHCP_DNS,,}" == "true" ]]; then
+            WIFI_CONNECT_ARGS+=" --no-dhcp-dns"
+        fi
+        
+        if [[ -n "${NO_DHCP_ROUTER_OPTION+x}" && "${NO_DHCP_ROUTER_OPTION,,}" == "true" ]]; then
+            WIFI_CONNECT_ARGS+=" --no-dhcp-router-option"
+        fi
+    fi
+
+    ./wifi-connect ${WIFI_CONNECT_ARGS} --start-hotspot
     sleep 1
 fi
 
