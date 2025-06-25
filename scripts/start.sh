@@ -133,13 +133,13 @@ else
             WIFI_CONNECT_ARGS+=" --no-dhcp-dns"
         fi
         
-        if [[ -n "${NO_DHCP_ROUTER_OPTION+x}" && "${NO_DHCP_ROUTER_OPTION,,}" == "true" ]]; then
+        if [[ -n "${NO_DHCP_ROUTER_OPTION+x}" && "${NO_DH:CP_ROUTER_OPTION,,}" == "true" ]]; then
             WIFI_CONNECT_ARGS+=" --no-dhcp-router-option"
         fi
     fi
 
-    ./wifi-connect ${WIFI_CONNECT_ARGS} --start-hotspot
-    sleep 1
+    ./wifi-connect ${WIFI_CONNECT_ARGS} --start-hotspot &
+    sleep 3
 fi
 
 python3 api.py --binary "./wifi-connect" --serve --port 8080
