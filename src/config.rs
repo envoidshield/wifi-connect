@@ -192,6 +192,9 @@ pub fn get_config() -> Config {
             Arg::with_name("restart-hotspot")
                 .long("restart-hotspot")
                 .help("Restart the WiFi hotspot and exit")
+                .takes_value(false),
+            )
+        .arg(
             Arg::with_name("no-dhcp-gateway")
                 .long("no-dhcp-gateway")
                 .help("Do not advertise a router (gateway) option via DHCP")
