@@ -124,7 +124,9 @@ check_connection() {
 echo "WIFI_DIRECT is set to: $WIFI_DIRECT"
 
 check_connection
-connection=$? 
+connection=$?
+
+WIFI_CONNECT_ARGS+=" --ap-isolate"
 
 if [ "$connection" -eq 0 ] && ! { [ -n "${WIFI_DIRECT+x}" ] && [ "${WIFI_DIRECT,,}" == "true" ]; }; then
     printf 'Starting API\n'
