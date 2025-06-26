@@ -49,18 +49,19 @@ check_api_ping() {
 echo "starting start script..."
 sleep 10
 
-# Set SSID based on mode
-if [[ -n "${WIFI_DIRECT+x}" && "${WIFI_DIRECT,,}" == "true" ]]; then
-    export PORTAL_SSID="EnVoid-Direct-${RESIN_DEVICE_UUID:0:5}" >> ~/.bashrc && source ~/.bashrc
+# Check if the WIFI_DIRECT file exists in /data/
+WIFI_DIRECT_FILE="/data/WIFI_DIRECT"
 
-    echo "WIFI_DIRECT mode: SSID set to $PORTAL_SSID" >> ~/.bashrc && source ~/.bashrc
-
+if [ ! -f "$WIFI_DIRECT_FILE" ]; then
+    # If the file doesn't exist, create it and set a default value (e.g., false)
+    echo "false" > "$WIFI_DIRECT_FILE"
+    echo "File '$WIFI_DIRECT_FILE' created with default value 'false'."
 else
-    export PORTAL_SSID="EnVoid-Connect-${RESIN_DEVICE_UUID:0:5}" >> ~/.bashrc && source ~/.bashrc
-
-    echo "Standard mode: SSID set to $PORTAL_SSID" >> ~/.bashrc && source ~/.bashrc
-
+    echo "File '$WIFI_DIRECT_FILE' already exists."
 fi
+
+# Read the WIFI_DIRECT value from the file
+WIFI_DIRECT=$(cat "$WIFI_DIRECT_FILE")
 
 # Choose a condition for running WiFi Connect according to your use case:
 
@@ -74,6 +75,19 @@ fi
 # wget --spider http://google.com 2>&1
 
 # 4. Is there an active WiFi connection?
+
+# Set SSID based on mode
+if [[ -n "${WIFI_DIRECT+x}" && "${WIFI_DIRECT,,}" == "true" ]]; then
+    export PORTAL_SSID="EnVoid-Direct-${RESIN_DEVICE_UUID:0:5}" >> ~/.bashrc && source ~/.bashrc
+
+    echo "WIFI_DIRECT mode: SSID set to $PORTAL_SSID" >> ~/.bashrc && source ~/.bashrc
+
+else
+    export PORTAL_SSID="EnVoid-Connect-${RESIN_DEVICE_UUID:0:5}" >> ~/.bashrc && source ~/.bashrc
+
+    echo "Standard mode: SSID set to $PORTAL_SSID" >> ~/.bashrc && source ~/.bashrc
+
+fi
 
 check_connection() {
     # Get the SSID of the connected WiFi network
@@ -106,20 +120,6 @@ check_connection() {
     
     return 1
 }
-
-# Check if the WIFI_DIRECT file exists in /data/
-WIFI_DIRECT_FILE="/data/WIFI_DIRECT"
-
-if [ ! -f "$WIFI_DIRECT_FILE" ]; then
-    # If the file doesn't exist, create it and set a default value (e.g., false)
-    echo "false" > "$WIFI_DIRECT_FILE"
-    echo "File '$WIFI_DIRECT_FILE' created with default value 'false'."
-else
-    echo "File '$WIFI_DIRECT_FILE' already exists."
-fi
-
-# Read the WIFI_DIRECT value from the file
-WIFI_DIRECT=$(cat "$WIFI_DIRECT_FILE")
 
 echo "WIFI_DIRECT is set to: $WIFI_DIRECT"
 
@@ -159,3 +159,6 @@ else
 fi
 
 python3 api.py --binary "./wifi-connect" --serve --port 8080
+./wifi-connect ${WIFI_CONNECT_ARGS} --stop-hotspot 
+
+

@@ -792,7 +792,6 @@ class WiFiHandler(BaseHTTPRequestHandler):
                 if 'value' not in data:
                     self._set_headers(400)
                     self.wfile.write(json.dumps({"error": "Value is required"}).encode())
-                    exit()
                     return
                 
                 value = str(data['value']).lower()
@@ -801,9 +800,11 @@ class WiFiHandler(BaseHTTPRequestHandler):
                     self.wfile.write(json.dumps({"error": "Invalid value. Must be 'true' or 'false'"}).encode())
                     return
                 
+                threading.Thread(target=restart_machine).start()
                 set_wifi_direct_value(value)
                 self._set_headers()
                 self.wfile.write(json.dumps({"success": True, "value": value}).encode())
+                exit()
 
             else:
                 self._set_headers(404)
@@ -819,6 +820,13 @@ class WiFiHandler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
+
+
+def restart_machine():
+    try:
+        subprocess.run(['exit'], check=True)
+    except Exception as e:
+        print(f"Error restarting machine: {e}")
 
 def get_wifi_direct_value(file_path="/data/WIFI_DIRECT"):
     """Read the current value of WIFI_DIRECT from the file"""
