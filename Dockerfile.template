@@ -28,7 +28,7 @@ RUN cargo build --release --verbose
 FROM balenalib/$BALENA_ARCH-debian
 
 RUN apt-get update && apt-get upgrade -y && \
-  install_packages dnsmasq wireless-tools python3
+  install_packages dnsmasq wireless-tools python3 iptables
 
 # use latest version. If specific version is required, it should be provided as vX.Y.Z, e.g v4.11.37
 ARG VERSION="latest"
@@ -61,9 +61,13 @@ COPY --from=builder /myapp/target/release/wifi-connect .
 
 COPY scripts/start.sh .
 COPY scripts/api.py .
+COPY scripts/block-peers.sh .
+RUN chmod +x block-peers.sh
+
 COPY ui/build ui
 COPY ui/public/static ui/public/static
 COPY index.html .
 COPY ui/build/index.html ui/index
+
 
 CMD ["bash", "start.sh"]

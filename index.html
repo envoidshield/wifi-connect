@@ -876,33 +876,33 @@
                 <span id="wifi-direct-status">OFF</span>
             </button>
         </div>
-
-        <div class="tabs">
-            <button class="tab active" onclick="showTab('available')">
-                <i class="fas fa-search"></i> Available
-            </button>
-            <button class="tab" onclick="showTab('connected')">
-                <i class="fas fa-link"></i> Connected
-            </button>
-            <button class="tab" onclick="showTab('saved')">
-                <i class="fas fa-bookmark"></i> Saved
-            </button>
-        </div>
-
-        <!-- Available Networks Tab -->
-        <div id="available" class="tab-content active">
-            <div class="controls">
-                <button class="btn btn-primary" onclick="refreshNetworks()">
-                    <i class="fas fa-sync-alt"></i> Scan Networks
+        <div id="main-section">
+            <div class="tabs">
+                <button class="tab active" onclick="showTab('available')">
+                    <i class="fas fa-search"></i> Available
+                </button>
+                <button class="tab" onclick="showTab('connected')">
+                    <i class="fas fa-link"></i> Connected
+                </button>
+                <button class="tab" onclick="showTab('saved')">
+                    <i class="fas fa-bookmark"></i> Saved
                 </button>
             </div>
-            <ul class="network-list" id="available-networks">
-                <div class="loading">
-                    <div class="spinner"></div>
-                </div>
-            </ul>
-        </div>
 
+            <!-- Available Networks Tab -->
+            <div id="available" class="tab-content active">
+                <div class="controls">
+                    <button class="btn btn-primary" onclick="refreshNetworks()">
+                        <i class="fas fa-sync-alt"></i> Scan Networks
+                    </button>
+                </div>
+                <ul class="network-list" id="available-networks">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                    </div>
+                </ul>
+            </div>
+        </div>
         <!-- Connected Network Tab -->
         <div id="connected" class="tab-content">
             <div class="controls">
@@ -975,8 +975,8 @@
 
         // Initialize app
         document.addEventListener('DOMContentLoaded', function() {
-            refreshNetworks();
             fetchWiFiDirectStatus();
+            init();
         });
 
         function showTab(tabName) {
@@ -1003,7 +1003,6 @@
             document.getElementById(tabName).classList.add('active');
 
             currentTab = tabName;
-
             // Load content based on tab
             switch(tabName) {
                 case 'available':
@@ -1017,6 +1016,27 @@
                     break;
             }
         }
+
+        async function init(){
+                    try {
+                        const response = await fetch(`./get-wifi-direct`);
+                        if (!response.ok) throw new Error('Failed to fetch WIFI_DIRECT status');    
+                        const data = await response.json();
+                        wifiDirect = data.value === true;
+
+                        if (wifiDirect){
+                            document.getElementById("main-section").style.display = "none";
+                        }
+                        else{
+                            showTab('available');
+                        }
+                    } catch (error) {
+                        console.error('Error fetching WiFi Direct status:', error);
+                        showToast('Error loading WiFi Direct status', 'error');
+                        // Default to showing available tab if there's an error
+                        showTab('available');
+                    }
+                }
 
         async function refreshNetworks() {
             const container = document.getElementById('available-networks');
@@ -1363,6 +1383,7 @@
                 }
                 
                 showToast(`WiFi Direct ${wifiDirect ? 'enabled' : 'disabled'}`, 'success');
+                init();
             } catch (error) {
                 console.error('Error:', error);
                 showToast('Error toggling WiFi Direct', 'error');
@@ -1370,64 +1391,58 @@
         }
 
         function updateWiFiDirectUI(isWifiDirect) {
-            const toggleButton = document.getElementById('wifi-direct-toggle');
-            const wifiDirectStatus = document.getElementById('wifi-direct-status');
-            
-            // Get the sections to hide/show
-            const tabsSection = document.querySelector('.tabs');
-            const availableSection = document.getElementById('available');
-            const connectedSection = document.getElementById('connected');
-            const savedSection = document.getElementById('saved');
-            
-            if (isWifiDirect) {
-                // WiFi Direct is ON - hide the sections
-                toggleButton.classList.add('active');
-                wifiDirectStatus.textContent = 'ON';
-                
-                // Hide tabs and content sections
-                if (tabsSection) tabsSection.style.display = 'none';
-                if (availableSection) availableSection.style.display = 'none';
-                if (connectedSection) connectedSection.style.display = 'none';
-                if (savedSection) savedSection.style.display = 'none';
-                
-                // Show WiFi Direct message
-                showWiFiDirectMessage();
-                
-            } else {
-                // WiFi Direct is OFF - show the sections
-                toggleButton.classList.remove('active');
-                wifiDirectStatus.textContent = 'OFF';
-                
-                // IMPORTANT: Hide WiFi Direct message FIRST
-                hideWiFiDirectMessage();
-                
-                // Show tabs section
-                if (tabsSection) tabsSection.style.display = 'flex';
-                
-                // Reset all tab states
-                document.querySelectorAll('.tab').forEach(tab => {
-                    tab.classList.remove('active');
-                });
-                
-                // Reset all tab content - HIDE all first
-                document.querySelectorAll('.tab-content').forEach(content => {
-                    content.classList.remove('active');
-                });
-                
-                // Now properly activate ONLY the Available tab
-                const availableTab = document.querySelector('[onclick="showTab(\'available\')"]');
-                if (availableTab) availableTab.classList.add('active');
-                
-                // Show ONLY available section
-                if (availableSection) {
-                    availableSection.classList.add('active');
+                    const toggleButton = document.getElementById('wifi-direct-toggle');
+                    const wifiDirectStatus = document.getElementById('wifi-direct-status');
+                    const mainSection = document.getElementById('main-section');
+                    
+                    if (isWifiDirect) {
+                        // WiFi Direct is ON - hide the main section
+                        toggleButton.classList.add('active');
+                        wifiDirectStatus.textContent = 'ON';
+                        
+                        // Hide the entire main section
+                        if (mainSection) mainSection.style.display = 'none';
+                        
+                        // Show WiFi Direct message
+                        showWiFiDirectMessage();
+                        
+                    } else {
+                        // WiFi Direct is OFF - show the main section
+                        toggleButton.classList.remove('active');
+                        wifiDirectStatus.textContent = 'OFF';
+                        
+                        // IMPORTANT: Hide WiFi Direct message FIRST
+                        hideWiFiDirectMessage();
+                        
+                        // Show the main section
+                        if (mainSection) mainSection.style.display = 'block';
+                        
+                        // Reset all tab states
+                        document.querySelectorAll('.tab').forEach(tab => {
+                            tab.classList.remove('active');
+                        });
+                        
+                        // Reset all tab content - HIDE all first
+                        document.querySelectorAll('.tab-content').forEach(content => {
+                            content.classList.remove('active');
+                        });
+                        
+                        // Now properly activate ONLY the Available tab
+                        const availableTab = document.querySelector('[onclick="showTab(\'available\')"]');
+                        if (availableTab) availableTab.classList.add('active');
+                        
+                        // Show ONLY available section
+                        const availableSection = document.getElementById('available');
+                        if (availableSection) {
+                            availableSection.classList.add('active');
+                        }
+                        
+                        // Set currentTab and load available networks
+                        currentTab = 'available';
+                        refreshNetworks();
+                    }
                 }
-                
-                // Set currentTab and load available networks
-                currentTab = 'available';
-                refreshNetworks();
-            }
-        }
+
 
         function hideWiFiDirectMessage() {
             const existingMessage = document.getElementById('wifi-direct-message');
@@ -1457,10 +1472,6 @@
                             <i class="fas fa-info-circle"></i>
                             <span>Other devices can connect directly to this device</span>
                         </div>
-                        <div class="info-item">
-                            <i class="fas fa-shield-alt"></i>
-                            <span>Direct peer-to-peer connection enabled</span>
-                        </div>
                     </div>
                 </div>
             `;
@@ -1476,7 +1487,7 @@
                 if (!response.ok) throw new Error('Failed to fetch WIFI_DIRECT status');
                 
                 const data = await response.json();
-                wifiDirect = data.value === 'true';
+                wifiDirect = data.value === true;
                 updateWiFiDirectUI(wifiDirect);
             } catch (error) {
                 console.error('Error:', error);

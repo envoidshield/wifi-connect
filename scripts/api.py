@@ -22,6 +22,24 @@ class WiFiConnectWrapper:
         self._cache_timestamp = None
         self._cache_lock = threading.Lock()
         self.onkey_enabled = False
+        self.wifi_direct = get_wifi_direct_value() == 'true' 
+
+    def get_wifi_direct(self):
+            """Get the wifi-direct status"""
+            try:
+                # Re-read from file to ensure we have the latest value
+                current_value = get_wifi_direct_value()
+                self.wifi_direct = current_value == 'true'
+                return self.wifi_direct
+            except Exception as e:
+                print(f"Error reading wifi-direct status: {e}", file=sys.stderr)
+                return self.wifi_direct  # Return cached value if file read fails
+    
+    def set_wifi_direct(self, value):
+        """Set the wifi-direct status and update the file"""
+        set_wifi_direct_value(value)
+        self.wifi_direct = value
+        print(f"WiFi Direct is {'enabled' if self.wifi_direct else 'disabled'}")
 
     def toggle_onkey(self):
         """Toggle the onkey feature"""
@@ -161,18 +179,21 @@ class WiFiConnectWrapper:
                         print("Hotspot restarted successfully", file=sys.stderr)
     
     def list_networks(self, use_cache=False):
-        """List available WiFi networks, using cache when hotspot is running"""
-        networks = self._scan_networks_internal()
-        if use_cache and self._network_cache is not None:
-            # Use cached networks if available
-            return self._network_cache
-        
-        # Update cache even when hotspot is not running
-        with self._cache_lock:
-            self._network_cache = networks
-            self._cache_timestamp = datetime.now()
-        
-        return networks
+            """List available WiFi networks, using cache when hotspot is running"""
+            if self.wifi_direct:
+                return []  # Return empty list instead of error tuple
+            
+            networks = self._scan_networks_internal()
+            if use_cache and self._network_cache is not None:
+                # Use cached networks if available
+                return self._network_cache
+            
+            # Update cache even when hotspot is not running
+            with self._cache_lock:
+                self._network_cache = networks
+                self._cache_timestamp = datetime.now()
+            
+            return networks
     
     def get_cache_info(self):
         """Get information about the network cache"""
@@ -205,8 +226,9 @@ class WiFiConnectWrapper:
         """Start the hotspot"""
         try:
             # Start hotspot in background (non-blocking)
+            wifi_connect_args = os.getenv('WIFI_CONNECT_ARGS', '').split()
             process = subprocess.Popen(
-                [self.binary_path, "--start-hotspot"],
+                [self.binary_path, "--start-hotspot"] + wifi_connect_args,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True
@@ -253,6 +275,9 @@ class WiFiConnectWrapper:
     
     def list_connected(self):
         """List currently connected WiFi network using the binary"""
+        if self.wifi_direct:
+            return None  # Return None instead of error tuple
+            
         try:
             result = subprocess.run(
                 [self.binary_path, "--list-connected"],
@@ -272,7 +297,6 @@ class WiFiConnectWrapper:
                     connected_section = output.split("Connected:")[1]
                 
                 # Parse the connected network information
-                # Expected format: SSID: <name>, Security: <type>, Signal: <strength>%, Interface: <interface>, IP: <ip_address>
                 ssid_match = re.search(r'SSID: (.*?)(?:,|$)', connected_section, re.MULTILINE)
                 security_match = re.search(r'Security: (.*?)(?:,|$)', connected_section, re.MULTILINE)
                 signal_match = re.search(r'Signal: (\d+)%', connected_section)
@@ -297,9 +321,12 @@ class WiFiConnectWrapper:
             print(f"Error listing connected network: {e}", file=sys.stderr)
             print(f"Error output: {e.stderr}", file=sys.stderr)
             return None
-    
+  
     def list_saved(self):
         """List all saved WiFi networks using the binary"""
+        if self.wifi_direct:
+            return []  # Return empty list instead of error tuple
+            
         try:
             result = subprocess.run(
                 [self.binary_path, "--list-saved"],
@@ -318,7 +345,6 @@ class WiFiConnectWrapper:
                 networks_section = output.split("Saved WiFi Networks:")[1]
                 
                 # Parse each saved network entry
-                # Expected format: "SSID: <name>, Security: <type>"
                 network_pattern = re.compile(r'SSID: (.*?), Security: (.*?)(?:,|$)', re.MULTILINE)
                 matches = network_pattern.findall(networks_section)
                 
@@ -338,7 +364,7 @@ class WiFiConnectWrapper:
             print(f"Error listing saved networks: {e}", file=sys.stderr)
             print(f"Error output: {e.stderr}", file=sys.stderr)
             return []
-    
+ 
     def check_internet_connectivity(self, interface=None, timeout=5):
         """Check if we have actual internet connectivity by pinging reliable servers"""
         test_hosts = [
@@ -402,6 +428,9 @@ class WiFiConnectWrapper:
 
     def forget_network(self, ssid):
         """Forget a specific WiFi network using the binary"""
+        if self.wifi_direct:
+            return False  # Return False instead of error tuple
+            
         try:
             subprocess.run(
                 [self.binary_path, "--forget-network", ssid],
@@ -419,6 +448,9 @@ class WiFiConnectWrapper:
 
     def forget_all(self):
         """Forget all saved WiFi networks using the binary"""
+        if self.wifi_direct:
+            return False  # Return False instead of error tuple
+            
         try:
             subprocess.run(
                 [self.binary_path, "--forget-all"],
@@ -438,9 +470,11 @@ class WiFiConnectWrapper:
             print(f"Error output: {e.stderr if hasattr(e, 'stderr') else ''}", file=sys.stderr)
             return False
 
-    
     def connect(self, ssid, passphrase=None):
         """Connect to a WiFi network using the binary with proper hotspot management"""
+        if self.wifi_direct:
+            return False  # Return False instead of error tuple
+            
         hotspot_was_running = False
         hotspot_info = None
         
@@ -555,8 +589,6 @@ class WiFiConnectWrapper:
                     print("Failed to restart hotspot after connection failure", file=sys.stderr)
             elif connection_successful:
                 print(f"Connected successfully to '{ssid}', hotspot remains off", file=sys.stderr)
-            
-            return connection_successful
 
 class WiFiHandler(BaseHTTPRequestHandler):
     wifi_manager = None  
@@ -584,41 +616,57 @@ class WiFiHandler(BaseHTTPRequestHandler):
                 self._set_headers(404)
                 self.wfile.write(json.dumps({"error": "index.html not found"}).encode())
 
+
         elif self.path == '/get-wifi-direct':
-            wifi_direct_value = get_wifi_direct_value()
-            self._set_headers()
-            self.wfile.write(json.dumps({"value": wifi_direct_value}).encode())
+                    try:
+                        wifi_direct_value = self.wifi_manager.get_wifi_direct()
+                        self._set_headers()
+                        self.wfile.write(json.dumps({"value": wifi_direct_value}).encode())
+                    except Exception as e:
+                        print(f"Error getting wifi-direct status: {e}", file=sys.stderr)
+                        self._set_headers(500)
+                        self.wfile.write(json.dumps({"error": "Failed to get wifi-direct status"}).encode())
 
         elif self.path.startswith('/list-networks'):
-            print("Getting network list...", file=sys.stderr)
-            use_cache = 'use_cache=true' in self.path
+                    # Check if WiFi Direct is enabled
+                    if self.wifi_manager.wifi_direct:
+                        self._set_headers()
+                        self.wfile.write(json.dumps({
+                            "networks": [],
+                            "cache_info": {"cached": False, "cache_age": None, "cache_valid": False, "networks_count": 0},
+                            "wifi_direct_active": True
+                        }).encode())
+                        return
+                        
+                    print("Getting network list...", file=sys.stderr)
+                    use_cache = 'use_cache=true' in self.path
 
-            # Check if hotspot is running
-            hotspot_status = self.wifi_manager.check_hotspot_status()
-            is_running = hotspot_status.get('running', False)
+                    # Check if hotspot is running
+                    hotspot_status = self.wifi_manager.check_hotspot_status()
+                    is_running = hotspot_status.get('running', False)
 
-            networks = []
-            cache_info = {}
+                    networks = []
+                    cache_info = {}
 
-            if use_cache: 
-                networks = self.wifi_manager.list_networks(use_cache=True)
-                cache_info = self.wifi_manager.get_cache_info()
-            elif not is_running:
-                # If the hotspot is not running, simply list networks (new logic)
-                networks = self.wifi_manager.list_networks(use_cache=use_cache)
-                cache_info = self.wifi_manager.get_cache_info()
-            else:
-                self.wifi_manager.stop_hotspot()
-                time.sleep(2)
-                networks = self.wifi_manager.list_networks(use_cache=False) # Force rescan
-                time.sleep(2)
-                self.wifi_manager.start_hotspot()
+                    if use_cache: 
+                        networks = self.wifi_manager.list_networks(use_cache=True)
+                        cache_info = self.wifi_manager.get_cache_info()
+                    elif not is_running:
+                        # If the hotspot is not running, simply list networks (new logic)
+                        networks = self.wifi_manager.list_networks(use_cache=use_cache)
+                        cache_info = self.wifi_manager.get_cache_info()
+                    else:
+                        self.wifi_manager.stop_hotspot()
+                        time.sleep(2)
+                        networks = self.wifi_manager.list_networks(use_cache=False) # Force rescan
+                        time.sleep(2)
+                        self.wifi_manager.start_hotspot()
 
-            self._set_headers()
-            self.wfile.write(json.dumps({
-                "networks": networks,
-                "cache_info": cache_info
-            }).encode())
+                    self._set_headers()
+                    self.wfile.write(json.dumps({
+                        "networks": networks,
+                        "cache_info": cache_info
+                    }).encode())
             
         elif self.path == '/list-networks?refresh=true' or self.path == '/list-networks?force=true':
             print("Force refreshing network list...", file=sys.stderr)
@@ -636,11 +684,29 @@ class WiFiHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({"cache_info": cache_info}).encode())
         
         elif self.path == '/list-connected':
+            # Check if WiFi Direct is enabled
+            if self.wifi_manager.wifi_direct:
+                self._set_headers()
+                self.wfile.write(json.dumps({
+                    "connected": None,
+                    "wifi_direct_active": True
+                }).encode())
+                return
+                
             connected = self.wifi_manager.list_connected()
             self._set_headers()
             self.wfile.write(json.dumps({"connected": connected}).encode())
-        
+             
         elif self.path == '/list-saved':
+            # Check if WiFi Direct is enabled
+            if self.wifi_manager.wifi_direct:
+                self._set_headers()
+                self.wfile.write(json.dumps({
+                    "saved_networks": [],
+                    "wifi_direct_active": True
+                }).encode())
+                return
+                
             saved_networks = self.wifi_manager.list_saved()
             self._set_headers()
             self.wfile.write(json.dumps({"saved_networks": saved_networks}).encode())
@@ -679,8 +745,7 @@ class WiFiHandler(BaseHTTPRequestHandler):
         else:
             self._set_headers(404)
             self.wfile.write(json.dumps({"error": "Not found"}).encode())
-
-    
+  
     def do_POST(self):
         content_length = int(self.headers['Content-Length'])
         post_data = self.rfile.read(content_length)
@@ -688,15 +753,32 @@ class WiFiHandler(BaseHTTPRequestHandler):
         try:
             data = json.loads(post_data.decode('utf-8'))
             
+
             if self.path == '/forget-all':
-                success = self.wifi_manager.forget_all()
-                self._set_headers()
-                if success:
-                    time.sleep(2)
-                    self.wifi_manager.start_hotspot()
-                self.wfile.write(json.dumps({"success": success}).encode())
-            
+                            if self.wifi_manager.wifi_direct:
+                                self._set_headers(403)
+                                self.wfile.write(json.dumps({
+                                    "success": False,
+                                    "error": "Operation forbidden in WiFi Direct mode"
+                                }).encode())
+                                return
+                                
+                            success = self.wifi_manager.forget_all()
+                            self._set_headers()
+                            if success:
+                                time.sleep(2)
+                                self.wifi_manager.start_hotspot()
+                            self.wfile.write(json.dumps({"success": success}).encode())
+                        
             elif self.path == '/forget-network':
+                if self.wifi_manager.wifi_direct:
+                    self._set_headers(403)
+                    self.wfile.write(json.dumps({
+                        "success": False,
+                        "error": "Operation forbidden in WiFi Direct mode"
+                    }).encode())
+                    return
+                    
                 if 'ssid' not in data:
                     self._set_headers(400)
                     self.wfile.write(json.dumps({"error": "SSID is required"}).encode())
@@ -706,8 +788,16 @@ class WiFiHandler(BaseHTTPRequestHandler):
                 success = self.wifi_manager.forget_network(ssid)
                 self._set_headers()
                 self.wfile.write(json.dumps({"success": success}).encode())
-            
+                        
             elif self.path == '/connect':
+                if self.wifi_manager.wifi_direct:
+                    self._set_headers(403)
+                    self.wfile.write(json.dumps({
+                        "success": False,
+                        "error": "Operation forbidden in WiFi Direct mode"
+                    }).encode())
+                    return
+                    
                 if 'ssid' not in data:
                     self._set_headers(400)
                     self.wfile.write(json.dumps({"error": "SSID is required"}).encode())
@@ -754,8 +844,7 @@ class WiFiHandler(BaseHTTPRequestHandler):
                         response_data["message"] += " - Hotspot failed to restart"
                 
                 self._set_headers()
-                self.wfile.write(json.dumps(response_data).encode())
-            
+                self.wfile.write(json.dumps(response_data).encode())          
             elif self.path == '/start-hotspot':
                 success = self.wifi_manager.start_hotspot()
                 self._set_headers()
@@ -801,7 +890,7 @@ class WiFiHandler(BaseHTTPRequestHandler):
                     return
                 
                 threading.Thread(target=restart_machine).start()
-                set_wifi_direct_value(value)
+                self.wifi_manager.set_wifi_direct(value)
                 self._set_headers()
                 self.wfile.write(json.dumps({"success": True, "value": value}).encode())
                 exit()

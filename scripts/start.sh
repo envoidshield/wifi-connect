@@ -77,6 +77,8 @@ WIFI_DIRECT=$(cat "$WIFI_DIRECT_FILE")
 # 4. Is there an active WiFi connection?
 
 # Set SSID based on mode
+./block-peers.sh
+
 if [[ -n "${WIFI_DIRECT+x}" && "${WIFI_DIRECT,,}" == "true" ]]; then
     export PORTAL_SSID="EnVoid-Direct-${RESIN_DEVICE_UUID:0:5}" >> ~/.bashrc && source ~/.bashrc
 
