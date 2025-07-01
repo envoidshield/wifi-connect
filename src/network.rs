@@ -736,22 +736,50 @@ pub fn forget_all_wifi_connections(manager: &NetworkManager) -> Result<()> {
     Ok(())
 }
 
-// Fixed function: Use the error_chain Result type alias instead of std::result::Result
 pub fn list_connected_connections() -> Result<Vec<Connection>> {
     let manager = NetworkManager::new();
-
-    let connections = manager.get_connections()
-        .chain_err(|| ErrorKind::Msg("Getting existing connections failed".to_string()))?;
-
-    // Filter only connections that are 'Activated' (i.e., connected)
+    
+    let connections = match manager.get_connections() {
+        Ok(conns) => conns,
+        Err(e) => {
+            warn!("Failed to get connections: {}", e);
+            return Ok(Vec::new()); // Return empty list instead of failing completely
+        }
+    };
+    
     let connected_connections: Vec<Connection> = connections.into_iter()
-        .filter(|conn| {
+        .filter_map(|conn| {
             match conn.get_state() {
-                Ok(state) => state == ConnectionState::Activated,
-                Err(_) => false,
+                Ok(ConnectionState::Activated) => {
+                    // Additional check: make sure the connection has valid devices
+                    match conn.get_devices() {
+                        Ok(devices) => {
+                            // Skip connections that only have unknown/problematic device types
+                            let has_known_devices = devices.iter().any(|device| {
+                                !matches!(device.device_type(), DeviceType::Unknown)
+                            });
+                            
+                            if has_known_devices {
+                                Some(conn)
+                            } else {
+                                info!("Skipping connection with only unknown device types");
+                                None
+                            }
+                        },
+                        Err(e) => {
+                            info!("Skipping connection due to device enumeration error: {}", e);
+                            None
+                        }
+                    }
+                },
+                Ok(_) => None,
+                Err(e) => {
+                    debug!("Skipping connection due to state error: {}", e);
+                    None // Skip problematic connections instead of failing
+                }
             }
         })
         .collect();
-
+    
     Ok(connected_connections)
 }
