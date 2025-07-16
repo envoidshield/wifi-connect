@@ -35,7 +35,6 @@ mod server;
 mod hotspot_manager;
 
 use std::io::Write;
-use std::path;
 use std::process;
 use std::sync::mpsc::channel;
 use std::thread;
@@ -44,11 +43,8 @@ use std::time::Duration;
 use config::get_config;
 use errors::*;
 use exit::block_exit_signals;
-use hotspot_manager::HotspotManager; // Import the HotspotManager
-use network::{init_networking, process_network_commands, forget_all_wifi_connections, 
-              forget_specific_network, find_device, get_access_points, get_networks, 
-              get_connected_network, get_saved_networks, find_access_point, 
-              init_access_point_credentials, wait_for_connectivity};
+use hotspot_manager::HotspotManager;
+use network::{init_networking, process_network_commands};
 use privileges::require_root;
 
 fn main() {
@@ -78,22 +74,18 @@ fn run() -> Result<()> {
     // Handle hotspot management commands first
     if config.start_hotspot {
         return handle_start_hotspot(config);
-        return Ok(());
     }
 
     if config.stop_hotspot {
         return handle_stop_hotspot(config);
-        return Ok(());
     }
 
     if config.check_hotspot {
         return handle_check_hotspot(config);
-        return Ok(());
     }
 
     if config.restart_hotspot {
         return handle_restart_hotspot(config);
-        return Ok(());
     }
 
     // Handle existing WiFi management commands
@@ -128,9 +120,7 @@ fn run() -> Result<()> {
             // Wait a bit for the scan to complete
             thread::sleep(Duration::from_secs(2));
         }
-        
-        let access_points = network::get_access_points(&device, "")?;
-        let networks = network::get_networks(&access_points);
+        let networks = network::get_networks(&device, &config.ssid);
         
         println!("\nAvailable WiFi Networks:");
         println!("----------------------");
@@ -215,6 +205,16 @@ fn run() -> Result<()> {
             }
         } else {
             error!("Network '{}' not found", ssid);
+        }
+        return Ok(());
+    }
+
+        // Handle disconnect command
+    if config.disconnect {
+        let manager = network_manager::NetworkManager::new();
+        match network::disconnect_from_network(&manager, &config.interface) {
+            Ok(_) => info!("Disconnected successfully."),
+            Err(e) => error!("Failed to disconnect: {}", e),
         }
         return Ok(());
     }

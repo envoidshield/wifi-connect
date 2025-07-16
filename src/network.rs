@@ -15,8 +15,8 @@ use dnsmasq::{start_dnsmasq, stop_dnsmasq};
 use errors::*;
 use exit::{exit, trap_exit_signals, ExitResult};
 use server::start_server;
-use std::rc::Rc
-;
+use std::rc::Rc;
+
 pub enum NetworkCommand {
     Activate,
     Timeout,
@@ -228,7 +228,8 @@ impl NetworkCommandHandler {
     fn activate(&mut self) -> ExitResult {
         self.activated = true;
 
-        let networks = get_networks(&self.access_points);
+        // Fix: Pass the device and ssid to get_networks_from_access_points instead
+        let networks = get_networks_from_access_points(&self.access_points);
 
         self.server_tx
             .send(NetworkCommandResponse::Networks(networks))
@@ -428,7 +429,13 @@ fn get_access_points_ssids(access_points: &[AccessPoint]) -> Vec<&str> {
         .collect()
 }
 
-pub fn get_networks(access_points: &[AccessPoint]) -> Vec<Network> {
+pub fn get_networks(device: &Device, ssid: &String) -> Vec<Network> {
+    let access_points = get_access_points_impl(device, ssid).unwrap_or_default();
+    access_points.iter().map(get_network_info).collect()
+}
+
+// New function to convert access points to networks
+fn get_networks_from_access_points(access_points: &[AccessPoint]) -> Vec<Network> {
     access_points.iter().map(get_network_info).collect()
 }
 
@@ -708,6 +715,24 @@ fn is_access_point_connection(connection: &Connection) -> bool {
 
 fn is_wifi_connection(connection: &Connection) -> bool {
     connection.settings().kind == "802-11-wireless"
+}
+
+pub fn disconnect_from_network(manager: &NetworkManager, interface: &Option<String>) -> Result<()> {
+    let device = find_device(manager, interface)?;
+
+    // Check if device is connected
+    let device_state = device.get_state()?;
+    if device_state != DeviceState::Activated {
+        println!("No active connection found.");
+        return Ok(());
+    }
+
+    // Deactivate the device to disconnect from the network
+    device.disconnect()?; // Assuming there is a `disconnect` method
+
+    println!("Disconnected successfully.");
+
+    Ok(())
 }
 
 pub fn forget_all_wifi_connections(manager: &NetworkManager) -> Result<()> {

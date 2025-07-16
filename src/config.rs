@@ -37,6 +37,7 @@ pub struct Config {
     pub no_dhcp_gateway: bool,
     pub no_dhcp_dns: bool,
     pub no_dhcp_router_option: bool,
+    pub disconnect: bool
 }
 
 
@@ -212,6 +213,12 @@ pub fn get_config() -> Config {
                 .help("Explicitly set empty router option via DHCP (prevents auto-detection of gateway)")
                 .takes_value(false),
         )
+        .arg(
+                Arg::with_name("disconnect")
+                    .short("d")
+                    .long("disconnect")
+                    .help("Disconnects from the current WiFi network"),
+        )
         .get_matches();
 
     let interface: Option<String> = matches.value_of("portal-interface").map_or_else(
@@ -302,6 +309,7 @@ pub fn get_config() -> Config {
         no_dhcp_gateway,
         no_dhcp_dns,
         no_dhcp_router_option,
+        disconnect: matches.is_present("disconnect"),
     }
 }
 

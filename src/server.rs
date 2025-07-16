@@ -11,7 +11,7 @@ use iron::{
 use iron_cors::CorsMiddleware;
 use mount::Mount;
 use params::{FromValue, Params};
-use path::PathBuf;
+use std::path::PathBuf;
 use persistent::Write;
 use router::Router;
 use serde_json;
