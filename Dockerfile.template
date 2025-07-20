@@ -13,7 +13,7 @@ RUN USER=root cargo new --bin wifi-connect
 WORKDIR /myapp
 
 # Copy the Cargo.toml and Cargo.lock
-COPY Cargo.toml Cargo.lock ./
+COPY wifi-connect/Cargo.toml wifi-connect/Cargo.lock ./
 
 # Copy the source code
 COPY src ./src
@@ -59,15 +59,15 @@ WORKDIR /usr/src/app
 # Copy the compiled binary from the builder stage
 COPY --from=builder /myapp/target/release/wifi-connect .
 
-COPY scripts/start.sh .
-COPY scripts/api.py .
-COPY scripts/block-peers.sh .
+COPY wifi-connect/scripts/start.sh .
+COPY wifi-connect/scripts/api.py .
+COPY wifi-connect/scripts/block-peers.sh .
 RUN chmod +x block-peers.sh
 
-COPY ui/build ui
-COPY ui/public/static ui/public/static
-COPY index.html .
-COPY ui/build/index.html ui/index
+COPY wifi-connect/ui/build ui
+COPY wifi-connect/ui/public/static ui/public/static
+COPY wifi-connect/index.html .
+COPY wifi-connect/ui/build/index.html ui/index
 
 
 CMD ["bash", "start.sh"]
