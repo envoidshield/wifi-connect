@@ -16,7 +16,7 @@ WORKDIR /myapp
 COPY wifi-connect/Cargo.toml wifi-connect/Cargo.lock ./
 
 # Copy the source code
-COPY src ./src
+COPY wifi-connect/src ./src
 
 # This step builds the dependencies (and only the dependencies)
 RUN cargo build --release
