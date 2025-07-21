@@ -90,6 +90,8 @@ else
     echo "Standard mode: SSID set to $PORTAL_SSID" >> ~/.bashrc && source ~/.bashrc
 
 fi
+./wifi-connect --forget-network $PORTAL_SSID
+sleep 2
 
 check_connection() {
     # Get the SSID of the connected WiFi network

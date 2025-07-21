@@ -6,39 +6,61 @@ import sys
 import json
 import re
 import time
+import logging
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 import mimetypes
 from datetime import datetime, timedelta
+
+# Configure logging
+def setup_logging():
+    """Setup logging configuration"""
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(sys.stderr),
+            logging.FileHandler('/tmp/wifi-connect-api.log')
+        ]
+    )
+    return logging.getLogger(__name__)
+
+logger = setup_logging()
 
 touchscreen = os.getenv('ENABLE_SURFACE_SUPPORT')
 
 class WiFiConnectWrapper:
     def __init__(self, binary_path="wifi-connect", cache_duration=300):  # 5 minutes default cache
         """Initialize with path to the wifi-connect binary and cache duration in seconds"""
+        logger.debug(f"Initializing WiFiConnectWrapper with binary_path={binary_path}, cache_duration={cache_duration}")
         self.binary_path = binary_path
         self.cache_duration = cache_duration
         self._network_cache = None
         self._cache_timestamp = None
         self._cache_lock = threading.Lock()
         self.onkey_enabled = False
-        self.wifi_direct = get_wifi_direct_value() == 'true' 
+        self.wifi_direct = get_wifi_direct_value() == 'true'
+        logger.debug(f"WiFiConnectWrapper initialized - wifi_direct={self.wifi_direct}") 
 
     def get_wifi_direct(self):
             """Get the wifi-direct status"""
+            logger.debug("Getting wifi-direct status")
             try:
                 # Re-read from file to ensure we have the latest value
                 current_value = get_wifi_direct_value()
                 self.wifi_direct = current_value == 'true'
+                logger.debug(f"WiFi Direct status: {self.wifi_direct} (file value: {current_value})")
                 return self.wifi_direct
             except Exception as e:
-                print(f"Error reading wifi-direct status: {e}", file=sys.stderr)
+                logger.error(f"Error reading wifi-direct status: {e}")
                 return self.wifi_direct  # Return cached value if file read fails
     
     def set_wifi_direct(self, value):
         """Set the wifi-direct status and update the file"""
+        logger.debug(f"Setting wifi-direct to: {value}")
         set_wifi_direct_value(value)
         self.wifi_direct = value
+        logger.info(f"WiFi Direct is {'enabled' if self.wifi_direct else 'disabled'}")
         print(f"WiFi Direct is {'enabled' if self.wifi_direct else 'disabled'}")
 
     def toggle_onkey(self):
@@ -48,13 +70,17 @@ class WiFiConnectWrapper:
     
     def check_hotspot_status(self):
         """Check if hotspot is currently running"""
+        logger.debug("Checking hotspot status")
         try:
+            logger.debug(f"Running command: {self.binary_path} --check-hotspot")
             result = subprocess.run(
                 [self.binary_path, "--check-hotspot"],
                 capture_output=True,
                 text=True,
                 check=True
             )
+            
+            logger.debug(f"Hotspot check output: {result.stdout}")
             
             # Parse the output to determine if hotspot is running
             output = result.stdout
@@ -66,7 +92,7 @@ class WiFiConnectWrapper:
                 password_match = re.search(r'Password Protected: (.*?)(?:\n|$)', output)
                 uptime_match = re.search(r'Uptime: (.*?)(?:\n|$)', output)
                 
-                return {
+                status = {
                     "running": True,
                     "ssid": ssid_match.group(1).strip() if ssid_match else None,
                     "gateway": gateway_match.group(1).strip() if gateway_match else None,
@@ -74,30 +100,42 @@ class WiFiConnectWrapper:
                     "password_protected": password_match.group(1).strip() == "true" if password_match else False,
                     "uptime": uptime_match.group(1).strip() if uptime_match else None
                 }
+                logger.debug(f"Hotspot is running: {status}")
+                return status
             else:
+                logger.debug("Hotspot is not running")
                 return {"running": False}
                 
         except subprocess.CalledProcessError as e:
-            print(f"Error checking hotspot status: {e}", file=sys.stderr)
+            logger.error(f"Error checking hotspot status: {e}")
+            logger.error(f"Error output: {e.stderr}")
             return {"running": False}
     
     def _is_cache_valid(self):
         """Check if the network cache is still valid"""
         if self._network_cache is None or self._cache_timestamp is None:
+            logger.debug("Cache is invalid: cache is None or timestamp is None")
             return False
         
-        return datetime.now() - self._cache_timestamp < timedelta(seconds=self.cache_duration)
+        cache_age = datetime.now() - self._cache_timestamp
+        is_valid = cache_age < timedelta(seconds=self.cache_duration)
+        logger.debug(f"Cache validity check: age={cache_age.total_seconds():.1f}s, duration={self.cache_duration}s, valid={is_valid}")
+        return is_valid
     
     def _scan_networks_internal(self):
         """Internal method to actually scan for networks"""
+        logger.debug("Scanning for networks internally")
         try:
             # Scan for networks
+            logger.debug(f"Running command: {self.binary_path} --list-networks")
             result = subprocess.run(
                 [self.binary_path, "--list-networks"],
                 capture_output=True,
                 text=True,
                 check=True
             )
+            
+            logger.debug(f"Network scan output: {result.stdout}")
             
             # Parse the output based on the actual format
             networks = []
@@ -113,30 +151,38 @@ class WiFiConnectWrapper:
                 network_pattern = re.compile(r'SSID: (.*?), Security: (.*?)(?:,|$)', re.MULTILINE)
                 matches = network_pattern.findall(networks_section)
                 
+                logger.debug(f"Found {len(matches)} network matches")
+                
                 for ssid, security in matches:
                     # Skip empty lines and connected status indicators
                     ssid_clean = ssid.strip()
                     security_clean = security.strip()
                     if ssid_clean and not ssid_clean.startswith('('):
-                        networks.append({
+                        network_info = {
                             "ssid": ssid_clean,
                             "security": security_clean,
-                        })
+                        }
+                        networks.append(network_info)
+                        logger.debug(f"Added network: {ssid_clean} (Security: {security_clean})")
             
+            logger.debug(f"Total networks found: {len(networks)}")
             return networks
             
         except subprocess.CalledProcessError as e:
-            print(f"Error scanning networks: {e}", file=sys.stderr)
-            print(f"Error output: {e.stderr}", file=sys.stderr)
+            logger.error(f"Error scanning networks: {e}")
+            logger.error(f"Error output: {e.stderr}")
             return []
     
     def _refresh_network_cache(self, force_rescan=False):
         """Refresh the network cache by temporarily stopping hotspot if needed"""
+        logger.debug(f"Refreshing network cache (force_rescan={force_rescan})")
         with self._cache_lock:
             # If cache is valid and we're not forcing a rescan, return cached data
             if not force_rescan and self._is_cache_valid():
+                logger.debug("Using valid cached network data")
                 return self._network_cache
             
+            logger.info("Refreshing network cache...")
             print("Refreshing network cache...", file=sys.stderr)
             
             hotspot_was_running = False
@@ -148,14 +194,17 @@ class WiFiConnectWrapper:
                 if hotspot_status.get("running", False):
                     hotspot_was_running = True
                     hotspot_info = hotspot_status
+                    logger.info("Hotspot is running, temporarily stopping to scan networks...")
                     print("Hotspot is running, temporarily stopping to scan networks...", file=sys.stderr)
                     
                     # Stop hotspot to allow scanning
                     if not self.stop_hotspot():
+                        logger.error("Failed to stop hotspot for scanning")
                         print("Failed to stop hotspot for scanning", file=sys.stderr)
                         return self._network_cache or []
                     
                     # Wait a moment for the interface to be available
+                    logger.debug("Waiting 3 seconds for interface to be available")
                     time.sleep(3)
                 
                 # Now scan for networks
@@ -165,6 +214,7 @@ class WiFiConnectWrapper:
                 self._network_cache = networks
                 self._cache_timestamp = datetime.now()
                 
+                logger.info(f"Network cache updated with {len(networks)} networks")
                 print(f"Network cache updated with {len(networks)} networks", file=sys.stderr)
                 
                 return networks
@@ -172,10 +222,13 @@ class WiFiConnectWrapper:
             finally:
                 # Restart hotspot if it was running before
                 if hotspot_was_running:
+                    logger.info("Restarting hotspot...")
                     print("Restarting hotspot...", file=sys.stderr)
                     if not self.start_hotspot():
+                        logger.error("Failed to restart hotspot after scanning")
                         print("Failed to restart hotspot after scanning", file=sys.stderr)
                     else:
+                        logger.info("Hotspot restarted successfully")
                         print("Hotspot restarted successfully", file=sys.stderr)
     
     def list_networks(self, use_cache=False):
@@ -472,7 +525,9 @@ class WiFiConnectWrapper:
 
     def connect(self, ssid, passphrase=None):
         """Connect to a WiFi network using the binary with proper hotspot management"""
+        logger.info(f"Attempting to connect to '{ssid}' (passphrase provided: {passphrase is not None})")
         if self.wifi_direct:
+            logger.warning("Connection attempt blocked - WiFi Direct mode is active")
             return False  # Return False instead of error tuple
             
         hotspot_was_running = False
@@ -485,27 +540,33 @@ class WiFiConnectWrapper:
             if hotspot_status.get("running", False):
                 hotspot_was_running = True
                 hotspot_info = hotspot_status
+                logger.info("Hotspot is running, stopping it for connection attempt...")
                 print("Hotspot is running, stopping it for connection attempt...", file=sys.stderr)
                 
                 if not self.stop_hotspot():
+                    logger.error("Failed to stop hotspot for connection")
                     print("Failed to stop hotspot for connection", file=sys.stderr)
                     return False
                 
                 # Wait for the interface to be available and verify hotspot is stopped
+                logger.debug("Waiting 3 seconds for interface to be available")
                 time.sleep(3)
                 
                 # Double-check that hotspot is actually stopped
                 verify_status = self.check_hotspot_status()
                 if verify_status.get("running", False):
+                    logger.warning("Hotspot still running after stop command, trying again...")
                     print("Hotspot still running after stop command, trying again...", file=sys.stderr)
                     self.stop_hotspot()
                     time.sleep(3)
                     
                     final_verify = self.check_hotspot_status()
                     if final_verify.get("running", False):
+                        logger.error("Failed to stop hotspot completely")
                         print("Failed to stop hotspot completely", file=sys.stderr)
                         return False
                 
+                logger.info("Hotspot successfully stopped")
                 print("Hotspot successfully stopped", file=sys.stderr)
             
             # Step 2: Scan networks to ensure the target network is available
@@ -592,19 +653,29 @@ class WiFiConnectWrapper:
 
 class WiFiHandler(BaseHTTPRequestHandler):
     wifi_manager = None  
+    
+    def log_message(self, format, *args):
+        """Override to use our logger instead of stderr"""
+        logger.info(f"{self.address_string()} - {format % args}")
+    
     def _set_headers(self, status_code=200):
+        logger.debug(f"Setting response headers with status code: {status_code}")
         self.send_response(status_code)
         self.send_header('Content-type', 'application/json')
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
     
     def do_GET(self):
+        logger.debug(f"GET request: {self.path}")
+        
         if self.path == '/':
             # Serve the main HTML file
+            logger.debug("Serving index.html")
             try:
                 with open('index.html', 'r') as f:
                     content = f.read()
                 if touchscreen == '1':
+                    logger.debug("Touchscreen mode enabled, adding keyboard scripts")
                     content = content.replace('<!-- kioskboard -->', '<script src="./ui/public/static/js/kioskboard-aio.min.js"></script>')
                     content = content.replace('<!-- keyboard -->', '<script src="./ui/public/static/js/keyboard.js"></script>')
                 self.send_response(200)
@@ -612,7 +683,9 @@ class WiFiHandler(BaseHTTPRequestHandler):
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
                 self.wfile.write(content.encode('utf-8'))
+                logger.debug("Successfully served index.html")
             except FileNotFoundError:
+                logger.error("index.html not found")
                 self._set_headers(404)
                 self.wfile.write(json.dumps({"error": "index.html not found"}).encode())
 
@@ -628,8 +701,10 @@ class WiFiHandler(BaseHTTPRequestHandler):
                         self.wfile.write(json.dumps({"error": "Failed to get wifi-direct status"}).encode())
 
         elif self.path.startswith('/list-networks'):
+                    logger.info("Handling list-networks request")
                     # Check if WiFi Direct is enabled
                     if self.wifi_manager.wifi_direct:
+                        logger.info("WiFi Direct is active, returning empty network list")
                         self._set_headers()
                         self.wfile.write(json.dumps({
                             "networks": [],
@@ -640,28 +715,34 @@ class WiFiHandler(BaseHTTPRequestHandler):
                         
                     print("Getting network list...", file=sys.stderr)
                     use_cache = 'use_cache=true' in self.path
+                    logger.debug(f"List networks request - use_cache: {use_cache}")
 
                     # Check if hotspot is running
                     hotspot_status = self.wifi_manager.check_hotspot_status()
                     is_running = hotspot_status.get('running', False)
+                    logger.debug(f"Hotspot running: {is_running}")
 
                     networks = []
                     cache_info = {}
 
                     if use_cache: 
+                        logger.debug("Using cached network list")
                         networks = self.wifi_manager.list_networks(use_cache=True)
                         cache_info = self.wifi_manager.get_cache_info()
                     elif not is_running:
                         # If the hotspot is not running, simply list networks (new logic)
+                        logger.debug("Hotspot not running, listing networks directly")
                         networks = self.wifi_manager.list_networks(use_cache=use_cache)
                         cache_info = self.wifi_manager.get_cache_info()
                     else:
+                        logger.debug("Hotspot running, stopping to scan networks")
                         self.wifi_manager.stop_hotspot()
                         time.sleep(2)
                         networks = self.wifi_manager.list_networks(use_cache=False) # Force rescan
                         time.sleep(2)
                         self.wifi_manager.start_hotspot()
 
+                    logger.info(f"Returning {len(networks)} networks")
                     self._set_headers()
                     self.wfile.write(json.dumps({
                         "networks": networks,
@@ -747,11 +828,14 @@ class WiFiHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({"error": "Not found"}).encode())
   
     def do_POST(self):
+        logger.debug(f"POST request: {self.path}")
         content_length = int(self.headers['Content-Length'])
         post_data = self.rfile.read(content_length)
+        logger.debug(f"POST data length: {content_length} bytes")
         
         try:
             data = json.loads(post_data.decode('utf-8'))
+            logger.debug(f"POST data: {data}")
             
 
             if self.path == '/forget-all':
@@ -790,7 +874,9 @@ class WiFiHandler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps({"success": success}).encode())
                         
             elif self.path == '/connect':
+                logger.info("Handling connect request")
                 if self.wifi_manager.wifi_direct:
+                    logger.warning("Connect request blocked - WiFi Direct mode active")
                     self._set_headers(403)
                     self.wfile.write(json.dumps({
                         "success": False,
@@ -799,6 +885,7 @@ class WiFiHandler(BaseHTTPRequestHandler):
                     return
                     
                 if 'ssid' not in data:
+                    logger.error("Connect request missing SSID")
                     self._set_headers(400)
                     self.wfile.write(json.dumps({"error": "SSID is required"}).encode())
                     return
@@ -806,16 +893,20 @@ class WiFiHandler(BaseHTTPRequestHandler):
                 ssid = data['ssid']
                 passphrase = data.get('passphrase')
                 
+                logger.info(f"Received connection request for '{ssid}' (passphrase provided: {passphrase is not None})")
                 print(f"Received connection request for '{ssid}'", file=sys.stderr)
                 
                 # Check hotspot status before connection attempt
                 initial_hotspot_status = self.wifi_manager.check_hotspot_status()
                 was_hotspot_running = initial_hotspot_status.get("running", False)
+                logger.debug(f"Initial hotspot status: running={was_hotspot_running}")
                 
                 if was_hotspot_running:
+                    logger.info("Hotspot is running, will be stopped for connection attempt")
                     print("Hotspot is running, will be stopped for connection attempt", file=sys.stderr)
                 
                 # Attempt connection (this handles hotspot stopping/restarting internally)
+                logger.info("Attempting connection...")
                 success = self.wifi_manager.connect(ssid, passphrase)
                 
                 # Wait a moment for status to stabilize
@@ -919,20 +1010,27 @@ def restart_machine():
 
 def get_wifi_direct_value(file_path="/data/WIFI_DIRECT"):
     """Read the current value of WIFI_DIRECT from the file"""
+    logger.debug(f"Reading WIFI_DIRECT value from {file_path}")
     if os.path.exists(file_path):
         with open(file_path, 'r') as f:
-            return f.read().strip()
+            value = f.read().strip()
+            logger.debug(f"WIFI_DIRECT value from file: {value}")
+            return value
     else:
+        logger.debug(f"WIFI_DIRECT file not found at {file_path}, returning 'false'")
         return "false"
 
 def set_wifi_direct_value(value, file_path="/data/WIFI_DIRECT"):
     """Write a new value to the WIFI_DIRECT file"""
+    logger.debug(f"Setting WIFI_DIRECT to '{value}' in {file_path}")
     with open(file_path, 'w') as f:
         f.write(str(value).lower())
+    logger.info(f"WIFI_DIRECT set to: {value}")
     print(f"WIFI_DIRECT set to: {value}")
 
 def run_server(server_class=HTTPServer, port=8000, wifi_manager=None):
     """Start the HTTP server"""
+    logger.info(f"Starting HTTP server on port {port}")
     server_address = ('', port)
     
     # Set the wifi_manager in the handler class
@@ -940,9 +1038,11 @@ def run_server(server_class=HTTPServer, port=8000, wifi_manager=None):
     
     httpd = server_class(server_address, WiFiHandler)
     print(f"Starting server on port {port}...")
+    logger.info("Server started successfully")
     httpd.serve_forever()
 
 def main():
+    logger.info("Starting WiFi Connect API")
     parser = argparse.ArgumentParser(description='WiFi Connection Manager with Network Caching')
     parser.add_argument('--binary', default='wifi-connect', help='Path to the wifi-connect binary (default: wifi-connect)')
     parser.add_argument('--cache-duration', type=int, default=300, help='Network cache duration in seconds (default: 300)')
@@ -963,6 +1063,7 @@ def main():
     parser.add_argument('--cache-info', action='store_true', help='Show cache information and exit')
     
     args = parser.parse_args()
+    logger.debug(f"Command line arguments: {args}")
     
     wifi_manager = WiFiConnectWrapper(binary_path=args.binary, cache_duration=args.cache_duration)
     
@@ -1085,9 +1186,11 @@ def main():
                               args.forget_all, args.forget_network, args.connect,
                               args.start_hotspot, args.stop_hotspot, args.restart_hotspot,
                               args.check_hotspot, args.clear_cache, args.cache_info])):
+        logger.info("Starting server mode")
         try:
             run_server(port=args.port, wifi_manager=wifi_manager)
         except KeyboardInterrupt:
+            logger.info("Received keyboard interrupt, shutting down server...")
             print("\nShutting down server...")
             sys.exit(0)
 
