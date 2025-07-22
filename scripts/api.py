@@ -797,6 +797,14 @@ class WiFiHandler(BaseHTTPRequestHandler):
             self._set_headers()
             self.wfile.write(json.dumps({"hotspot": status}).encode())
         
+        elif self.path == '/health':
+            # Simple health check endpoint
+            self._set_headers()
+            self.wfile.write(json.dumps({
+                "status": "healthy",
+                "timestamp": datetime.now().isoformat()
+            }).encode())
+        
         elif self.path == '/connection-status':
             # Get both connection and hotspot status
             connected = self.wifi_manager.list_connected()
@@ -804,7 +812,8 @@ class WiFiHandler(BaseHTTPRequestHandler):
             self._set_headers()
             self.wfile.write(json.dumps({
                 "connected": connected,
-                "hotspot": hotspot_status
+                "hotspot": hotspot_status,
+                "server_status": "online"
             }).encode())
         
         elif self.path.startswith('/ui/public/static'):
@@ -980,11 +989,23 @@ class WiFiHandler(BaseHTTPRequestHandler):
                     self.wfile.write(json.dumps({"error": "Invalid value. Must be 'true' or 'false'"}).encode())
                     return
                 
-                threading.Thread(target=restart_machine).start()
+                # Set the value first
                 self.wifi_manager.set_wifi_direct(value)
+                
+                # Send success response
                 self._set_headers()
-                self.wfile.write(json.dumps({"success": True, "value": value}).encode())
-                exit()
+                self.wfile.write(json.dumps({
+                    "success": True, 
+                    "value": value,
+                    "message": "Server will restart to apply changes"
+                }).encode())
+                
+                # Start restart in background after response is sent
+                def delayed_restart():
+                    time.sleep(1)  # Give client time to receive response
+                    threading.Thread(target=restart_machine).start()
+                
+                threading.Thread(target=delayed_restart).start()
 
             else:
                 self._set_headers(404)
@@ -1004,9 +1025,17 @@ class WiFiHandler(BaseHTTPRequestHandler):
 
 def restart_machine():
     try:
-        subprocess.run(['exit'], check=True)
+        # Send a proper response before restarting
+        logger.info("Initiating server restart...")
+        # Use a more reliable restart method
+        subprocess.run(['systemctl', 'restart', 'wifi-connect'], check=True)
     except Exception as e:
-        print(f"Error restarting machine: {e}")
+        logger.error(f"Error restarting machine: {e}")
+        # Fallback to exit if systemctl fails
+        try:
+            subprocess.run(['exit'], check=True)
+        except Exception as e2:
+            logger.error(f"Fallback restart also failed: {e2}")
 
 def get_wifi_direct_value(file_path="/data/WIFI_DIRECT"):
     """Read the current value of WIFI_DIRECT from the file"""

@@ -222,6 +222,28 @@
             text-align: center;
         }
 
+        .server-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+            color: #6c757d;
+            margin-top: 0.5rem;
+        }
+
+        .server-status i {
+            font-size: 0.75rem;
+            color: #28a745;
+        }
+
+        .server-status.offline i {
+            color: #dc3545;
+        }
+
+        .server-status.offline {
+            color: #dc3545;
+        }
+
         /* Animations */
         @keyframes slideIn {
             from {
@@ -864,6 +886,10 @@
         <div class="header">
           <img src="./ui/public/static/logo.png" alt="logo"  width="170px" height="170px" >
             <p>Connect to available WiFi networks</p>
+            <div class="server-status" id="server-status">
+                <i class="fas fa-circle"></i>
+                <span id="server-status-text">Online</span>
+            </div>
         </div>
 
         <div class="additional-section">
@@ -972,11 +998,104 @@
         let currentTab = 'available';
         let useCache = true;
         let wifiDirect = false;
+        let serverOnline = true; // Track server status
+        let pendingRequests = new Set(); // Track pending requests
+
+        // Server connectivity check
+        async function checkServerConnectivity() {
+            try {
+                const response = await fetch('health', { 
+                    method: 'GET',
+                    signal: AbortSignal.timeout(3000) // 3 second timeout
+                });
+                if (response.ok) {
+                    if (!serverOnline) {
+                        console.log('Server is back online');
+                        serverOnline = true;
+                        updateServerStatusIndicator(true);
+                    }
+                    return true;
+                }
+            } catch (error) {
+                if (serverOnline) {
+                    console.log('Server is offline/restarting');
+                    serverOnline = false;
+                    updateServerStatusIndicator(false);
+                }
+                return false;
+            }
+            return false;
+        }
+
+        // Enhanced fetch with server status handling
+        async function safeFetch(url, options = {}) {
+            const requestId = Math.random().toString(36);
+            pendingRequests.add(requestId);
+            
+            try {
+                // Check server connectivity first
+                const isOnline = await checkServerConnectivity();
+                if (!isOnline) {
+                    throw new Error('Server is offline or restarting');
+                }
+                
+                const response = await fetch(url, {
+                    ...options,
+                    signal: AbortSignal.timeout(10000) // 10 second timeout
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                return response;
+            } catch (error) {
+                console.error(`Request failed (${requestId}):`, error);
+                throw error;
+            } finally {
+                pendingRequests.delete(requestId);
+            }
+        }
+
+        // Enhanced showToast that respects server status
+        function showToast(message, type = 'success', force = false) {
+            // Don't show toast if server is offline and this isn't a forced message
+            if (!serverOnline && !force) {
+                console.log('Suppressing toast due to server offline:', message);
+                return;
+            }
+            
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast ${type}`;
+            toast.classList.add('show');
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        // Update server status indicator
+        function updateServerStatusIndicator(isOnline) {
+            const statusElement = document.getElementById('server-status');
+            const statusText = document.getElementById('server-status-text');
+            
+            if (isOnline) {
+                statusElement.classList.remove('offline');
+                statusText.textContent = 'Online';
+            } else {
+                statusElement.classList.add('offline');
+                statusText.textContent = 'Offline';
+            }
+        }
 
         // Initialize app
         document.addEventListener('DOMContentLoaded', function() {
             fetchWiFiDirectStatus();
             init();
+            
+            // Start periodic server status check
+            setInterval(checkServerConnectivity, 5000); // Check every 5 seconds
         });
 
         function showTab(tabName) {
@@ -1050,23 +1169,31 @@
                     useCache = false;
                 } else {
                     url += '?use_cache=false';
-                    showToast('Hotspot will restart', 'error')
+                    showToast('Hotspot will restart', 'error', true)
                 }
 
-                const response = await fetch(url);
-                if (!response.ok) throw new Error('Failed to fetch networks');
-                
+                const response = await safeFetch(url);
                 const data = await response.json();
                 renderAvailableNetworks(data.networks || []);
             } catch (error) {
                 console.error('Error:', error);
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <p>Error loading networks. Please try again.</p>
-                    </div>
-                `;
-                showToast('Error loading networks', 'error');
+                if (!serverOnline) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <i class="fas fa-server"></i>
+                            <p>Server is offline. Please wait...</p>
+                        </div>
+                    `;
+                    showToast('Server is offline, please wait...', 'error', true);
+                } else {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <p>Error loading networks. Please try again.</p>
+                        </div>
+                    `;
+                    showToast('Error loading networks', 'error', true);
+                }
             }
         }
 
@@ -1075,20 +1202,28 @@
             container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
 
             try {
-                const response = await fetch(`list-connected`);
-                if (!response.ok) throw new Error('Failed to fetch connected network');
-                
+                const response = await safeFetch(`list-connected`);
                 const data = await response.json();
                 renderConnectedNetwork(data.connected);
             } catch (error) {
                 console.error('Error:', error);
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fas fa-wifi-slash"></i>
-                        <p>Error loading connection status</p>
-                    </div>
-                `;
-                showToast('Error loading connection status', 'error');
+                if (!serverOnline) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <i class="fas fa-server"></i>
+                            <p>Server is offline. Please wait...</p>
+                        </div>
+                    `;
+                    showToast('Server is offline, please wait...', 'error', true);
+                } else {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <i class="fas fa-wifi-slash"></i>
+                            <p>Error loading connection status</p>
+                        </div>
+                    `;
+                    showToast('Error loading connection status', 'error', true);
+                }
             }
         }
 
@@ -1097,20 +1232,28 @@
             container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
 
             try {
-                const response = await fetch(`list-saved`);
-                if (!response.ok) throw new Error('Failed to fetch saved networks');
-                
+                const response = await safeFetch(`list-saved`);
                 const data = await response.json();
                 renderSavedNetworks(data.saved_networks || []);
             } catch (error) {
                 console.error('Error:', error);
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fas fa-bookmark"></i>
-                        <p>Error loading saved networks</p>
-                    </div>
-                `;
-                showToast('Error loading saved networks', 'error');
+                if (!serverOnline) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <i class="fas fa-server"></i>
+                            <p>Server is offline. Please wait...</p>
+                        </div>
+                    `;
+                    showToast('Server is offline, please wait...', 'error', true);
+                } else {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <i class="fas fa-bookmark"></i>
+                            <p>Error loading saved networks</p>
+                        </div>
+                    `;
+                    showToast('Error loading saved networks', 'error', true);
+                }
             }
         }
 
@@ -1240,7 +1383,7 @@
             closeModal();
             
             try {
-                const response = await fetch(`connect`, {
+                const response = await safeFetch(`connect`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1251,8 +1394,6 @@
                     })
                 });
                 
-                if (!response.ok) throw new Error('Connection failed');
-                
                 const data = await response.json();
                 
                 if (data.success) {
@@ -1263,13 +1404,13 @@
                 }
             } catch (error) {
                 console.error('Error:', error);
-                showToast(`Error connecting to ${ssid}`, 'error');
+                showToast(`Error connecting to ${ssid}`, 'error', true);
             }
         });
 
         async function connectToSaved(ssid) {
             try {
-                const response = await fetch(`connect`, {
+                const response = await safeFetch(`connect`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1280,8 +1421,6 @@
                     })
                 });
                 
-                if (!response.ok) throw new Error('Connection failed');
-                
                 const data = await response.json();
                 
                 if (data.success) {
@@ -1292,7 +1431,7 @@
                 }
             } catch (error) {
                 console.error('Error:', error);
-                showToast(`Error connecting to ${ssid}`, 'error');
+                showToast(`Error connecting to ${ssid}`, 'error', true);
             }
         }
 
@@ -1302,7 +1441,7 @@
             }
             
             try {
-                const response = await fetch(`forget-network`, {
+                const response = await safeFetch(`forget-network`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1311,8 +1450,6 @@
                         ssid: ssid
                     })
                 });
-                
-                if (!response.ok) throw new Error('Failed to forget network');
                 
                 const data = await response.json();
                 
@@ -1324,7 +1461,7 @@
                 }
             } catch (error) {
                 console.error('Error:', error);
-                showToast(`Error forgetting "${ssid}"`, 'error');
+                showToast(`Error forgetting "${ssid}"`, 'error', true);
             }
         }
 
@@ -1334,15 +1471,13 @@
             }
             
             try {
-                const response = await fetch(`forget-all`, {
+                const response = await safeFetch(`forget-all`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({})
                 });
-                
-                if (!response.ok) throw new Error('Failed to forget networks');
                 
                 const data = await response.json();
                 
@@ -1354,14 +1489,18 @@
                 }
             } catch (error) {
                 console.error('Error:', error);
-                showToast('Error forgetting all networks', 'error');
+                showToast('Error forgetting all networks', 'error', true);
             }
         }
 
         async function toggleWiFiDirect() {
             try {
                 const newValue = !wifiDirect;
-                const response = await fetch(`set-wifi-direct`, {
+                
+                // Show immediate feedback that the action is being processed
+                showToast(`Toggling WiFi Direct...`, 'success', true);
+                
+                const response = await safeFetch(`set-wifi-direct`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1370,8 +1509,6 @@
                         value: newValue.toString()
                     })
                 });
-                
-                if (!response.ok) throw new Error('Failed to toggle WIFI_DIRECT');
                 
                 const data = await response.json();
                 wifiDirect = data.value === 'true';
@@ -1383,10 +1520,31 @@
                 }
                 
                 showToast(`WiFi Direct ${wifiDirect ? 'enabled' : 'disabled'}`, 'success');
-                init();
+                
+                // Show restart notification
+                showToast('Server restarting to apply changes...', 'success', true);
+                
+                // The server will restart, so we need to wait and reinitialize
+                setTimeout(() => {
+                    console.log('Server restarting, waiting for reconnection...');
+                    // Wait for server to come back online
+                    const checkServer = async () => {
+                        const isOnline = await checkServerConnectivity();
+                        if (isOnline) {
+                            console.log('Server is back online, reinitializing...');
+                            showToast('Server restarted successfully', 'success', true);
+                            init();
+                        } else {
+                            // Check again in 2 seconds
+                            setTimeout(checkServer, 2000);
+                        }
+                    };
+                    checkServer();
+                }, 2000);
+                
             } catch (error) {
                 console.error('Error:', error);
-                showToast('Error toggling WiFi Direct', 'error');
+                showToast('Error toggling WiFi Direct', 'error', true);
             }
         }
 
@@ -1479,27 +1637,14 @@
 
         async function fetchWiFiDirectStatus() {
             try {
-                const response = await fetch(`get-wifi-direct`);
-                if (!response.ok) throw new Error('Failed to fetch WIFI_DIRECT status');
-                
+                const response = await safeFetch(`get-wifi-direct`);
                 const data = await response.json();
                 wifiDirect = data.value === true;
                 updateWiFiDirectUI(wifiDirect);
             } catch (error) {
                 console.error('Error:', error);
-                showToast('Error fetching WiFi Direct status', 'error');
+                showToast('Error fetching WiFi Direct status', 'error', true);
             }
-        }
-
-        function showToast(message, type = 'success') {
-            const toast = document.getElementById('toast');
-            toast.textContent = message;
-            toast.className = `toast ${type}`;
-            toast.classList.add('show');
-            
-            setTimeout(() => {
-                toast.classList.remove('show');
-            }, 3000);
         }
 
         function escapeHtml(text) {
