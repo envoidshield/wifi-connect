@@ -122,6 +122,21 @@ class WiFiConnectWrapper:
         logger.debug(f"Cache validity check: age={cache_age.total_seconds():.1f}s, duration={self.cache_duration}s, valid={is_valid}")
         return is_valid
     
+    def _create_error_response(self, error_type, message):
+        """Create a standardized error response"""
+        return {
+            "error": error_type,
+            "message": message,
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    def _handle_wifi_device_error(self, e):
+        """Handle 'Cannot find a WiFi device' error consistently"""
+        if e.stderr and "Cannot find a WiFi device" in e.stderr:
+            logger.warning("WiFi device not found - likely battery is low")
+            return self._create_error_response("battery_low", "Cannot find a WiFi device - battery may be low")
+        return None
+    
     def _scan_networks_internal(self):
         """Internal method to actually scan for networks"""
         logger.debug("Scanning for networks internally")
@@ -171,7 +186,13 @@ class WiFiConnectWrapper:
         except subprocess.CalledProcessError as e:
             logger.error(f"Error scanning networks: {e}")
             logger.error(f"Error output: {e.stderr}")
-            return []
+            
+            # Check for WiFi device error first
+            wifi_error = self._handle_wifi_device_error(e)
+            if wifi_error:
+                return wifi_error
+            
+            return self._create_error_response("scan_failed", f"Failed to scan networks: {e}")
     
     def _refresh_network_cache(self, force_rescan=False):
         """Refresh the network cache by temporarily stopping hotspot if needed"""
@@ -373,6 +394,12 @@ class WiFiConnectWrapper:
         except subprocess.CalledProcessError as e:
             print(f"Error listing connected network: {e}", file=sys.stderr)
             print(f"Error output: {e.stderr}", file=sys.stderr)
+            
+            # Check for WiFi device error first
+            wifi_error = self._handle_wifi_device_error(e)
+            if wifi_error:
+                return wifi_error
+            
             return None
   
     def list_saved(self):

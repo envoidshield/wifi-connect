@@ -1085,8 +1085,29 @@
             }
         }
 
+        // Centralized error response handling
+        function handleErrorResponse(response, container, context) {
+            if (response && typeof response === 'object' && response.error) {
+                const errorType = response.error;
+                const errorMessage = response.message || 'An error occurred';
+                
+                switch (errorType) {
+                    case 'battery_low':
+                        showErrorState(container, 'battery-quarter', 'Battery is low. Please charge the device.', true, 'Battery is low. Please charge the device.');
+                        break;
+                    case 'scan_failed':
+                        showErrorState(container, 'exclamation-triangle', 'Failed to scan networks. Please try again.', true, 'Failed to scan networks');
+                        break;
+                    default:
+                        showErrorState(container, 'exclamation-triangle', errorMessage, true, errorMessage);
+                }
+                return true; // Indicates error was handled
+            }
+            return false; // No error to handle
+        }
+
         // Helper function to show error UI state
-        function showErrorState(container, icon, message, showToast = true) {
+        function showErrorState(container, icon, message, showToast = true, toastMessage = null) {
             container.innerHTML = `
                 <div class="empty-state">
                     <i class="fas fa-${icon}"></i>
@@ -1094,7 +1115,8 @@
                 </div>
             `;
             if (showToast) {
-                showToast('Server is busy, please wait...', 'error', true);
+                const toastMsg = toastMessage || (serverOnline ? message : 'Server is busy, please wait...');
+                showToast(toastMsg, 'error', true);
             }
         }
 
@@ -1247,6 +1269,11 @@
         function renderAvailableNetworks(networks) {
             const container = document.getElementById('available-networks');
             
+            // Handle error responses using centralized function
+            if (handleErrorResponse(networks, container, 'renderAvailableNetworks')) {
+                return;
+            }
+            
             if (!networks || networks.length === 0) {
                 showErrorState(container, 'search', 'No networks found. Try refreshing.', false);
                 return;
@@ -1274,6 +1301,11 @@
         function renderConnectedNetwork(network) {
             const container = document.getElementById('connected-network');
             
+            // Handle error responses using centralized function
+            if (handleErrorResponse(network, container, 'renderConnectedNetwork')) {
+                return;
+            }
+            
             if (!network) {
                 showErrorState(container, 'wifi-slash', 'No network connected', false);
                 return;
@@ -1300,6 +1332,11 @@
 
         function renderSavedNetworks(networks) {
             const container = document.getElementById('saved-networks');
+            
+            // Handle error responses using centralized function
+            if (handleErrorResponse(networks, container, 'renderSavedNetworks')) {
+                return;
+            }
             
             if (!networks || networks.length === 0) {
                 showErrorState(container, 'bookmark', 'No saved networks found', false);
