@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KioskBoard Test - Double Input Fix</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        .input-group {
+            margin: 20px 0;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+            transition: border-color 0.3s;
+        }
+        input[type="text"]:focus, textarea:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e8f5e9;
+            border-left: 4px solid #4CAF50;
+            border-radius: 4px;
+        }
+        .test-info {
+            background: #fff3e0;
+            border-left: 4px solid #ff9800;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .test-info h3 {
+            margin-top: 0;
+            color: #e65100;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        #output {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            min-height: 50px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎹 KioskBoard Virtual Keyboard Test</h1>
+    
+    <div class="test-info">
+        <h3>Test Instructions:</h3>
+        <ol>
+            <li>Click on any input field below to activate the virtual keyboard</li>
+            <li>Type using the virtual keyboard</li>
+            <li>Check if characters appear only once (not doubled)</li>
+            <li>Test the language switcher if available</li>
+            <li>Test special characters button</li>
+        </ol>
+    </div>
+
+    <div class="input-group">
+        <label for="test-input-1">Basic Text Input:</label>
+        <input type="text" id="test-input-1" placeholder="Click here and type with virtual keyboard">
+    </div>
+
+    <div class="input-group">
+        <label for="test-input-2">Input with Special Characters Enabled:</label>
+        <input type="text" id="test-input-2" 
+               data-kioskboard-type="all" 
+               data-kioskboard-specialcharacters="true"
+               placeholder="Test special characters here">
+    </div>
+
+    <div class="input-group">
+        <label for="test-input-3">Numpad Only:</label>
+        <input type="text" id="test-input-3" 
+               data-kioskboard-type="numpad"
+               placeholder="Numbers only keyboard">
+    </div>
+
+    <div class="input-group">
+        <label for="test-textarea">Textarea with Full Keyboard:</label>
+        <textarea id="test-textarea" 
+                  data-kioskboard-type="all"
+                  data-kioskboard-specialcharacters="true"
+                  placeholder="Test multiline text input here"></textarea>
+    </div>
+
+    <div class="input-group">
+        <label>Control Buttons:</label>
+        <button onclick="clearAll()">Clear All Fields</button>
+        <button onclick="changeLanguage('en')">English</button>
+        <button onclick="changeLanguage('es')">Español</button>
+        <button onclick="changeLanguage('fr')">Français</button>
+        <button onclick="changeLanguage('de')">Deutsch</button>
+    </div>
+
+    <div class="status">
+        <h3>Input Monitor:</h3>
+        <div id="output">Type in any field above to see the output here...</div>
+    </div>
+
+    <!-- Load the fixed KioskBoard library -->
+    <script src="static/js/kioskboard-aio.min.js"></script>
+    
+    <script>
+        // Initialize KioskBoard with options
+        KioskBoard.init({
+            theme: 'light',
+            capsLockActive: true,
+            allowRealKeyboard: false,
+            allowMobileKeyboard: false,
+            cssAnimations: true,
+            cssAnimationsDuration: 250,
+            cssAnimationsStyle: 'slide',
+            keysAllowSpacebar: true,
+            keysSpacebarText: 'Space',
+            keysFontFamily: 'sans-serif',
+            keysFontSize: '22px',
+            keysFontWeight: 'normal',
+            keysIconSize: '25px',
+            autoScroll: true,
+            language: 'en',
+            allowLanguageSwitch: true,
+            languageButtonText: 'Lang'
+        });
+
+        // Run KioskBoard on all inputs
+        KioskBoard.run('input[type="text"]');
+        KioskBoard.run('textarea');
+
+        // Monitor input changes
+        const inputs = document.querySelectorAll('input[type="text"], textarea');
+        const output = document.getElementById('output');
+        
+        inputs.forEach(input => {
+            input.addEventListener('input', function(e) {
+                output.innerHTML = `
+                    <strong>Field ID:</strong> ${e.target.id}<br>
+                    <strong>Value:</strong> "${e.target.value}"<br>
+                    <strong>Length:</strong> ${e.target.value.length} characters<br>
+                    <strong>Last char:</strong> "${e.target.value.slice(-1)}"
+                `;
+                
+                // Check for doubled characters
+                const value = e.target.value;
+                if (value.length >= 2) {
+                    const lastTwo = value.slice(-2);
+                    if (lastTwo[0] === lastTwo[1]) {
+                        output.innerHTML += '<br><span style="color: red;">⚠️ Possible double character detected!</span>';
+                    } else {
+                        output.innerHTML += '<br><span style="color: green;">✓ No double character issue</span>';
+                    }
+                }
+            });
+        });
+
+        // Clear all fields
+        function clearAll() {
+            inputs.forEach(input => {
+                input.value = '';
+            });
+            output.innerHTML = 'All fields cleared. Ready for testing...';
+        }
+
+        // Change language
+        function changeLanguage(lang) {
+            KioskBoard.setLanguage(lang);
+            output.innerHTML = `Language changed to: ${lang}`;
+        }
+
+        // Log to console for debugging
+        console.log('KioskBoard Test Page Loaded');
+        console.log('Available languages:', KioskBoard.getAvailableLanguages());
+    </script>
+</body>
+</html>
