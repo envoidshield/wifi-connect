@@ -1376,7 +1376,10 @@
                 passwordGroup.style.display = 'block';
             }
             
-            document.getElementById('connect-modal').style.display = 'flex';
+            const modal = document.getElementById('connect-modal');
+            modal.style.display = 'flex';
+            modal.style.justifyContent = 'center';
+            modal.style.alignItems = 'center';
             
             // Initialize keyboard for this modal instance
             if (window.initKeyboardForModal) {
@@ -1699,8 +1702,172 @@
 
         // Prevent zoom on iOS when focusing input fields
         document.addEventListener('touchstart', function() {}, {passive: true});
+        
+        // Add mock data for local testing
+        window.mockNetworks = [
+            { ssid: 'Home WiFi 5G', security: 'wpa2' },
+            { ssid: 'Guest Network', security: 'open' },
+            { ssid: 'Office Secure', security: 'wpa2' },
+            { ssid: 'Cafe Free WiFi', security: 'open' },
+            { ssid: 'Neighbor Network', security: 'wpa' }
+        ];
+        
+        // Override refreshNetworks for local testing when server is not available
+        const originalRefreshNetworks = window.refreshNetworks;
+        window.refreshNetworks = async function() {
+            const container = document.getElementById('available-networks');
+            
+            // Try original first
+            try {
+                await originalRefreshNetworks();
+            } catch (error) {
+                // If server is not available, use mock data
+                console.log('Using mock network data for testing');
+                window.renderAvailableNetworks(window.mockNetworks);
+            }
+        };
+        // Keyboard detection and modal repositioning
+        let keyboardHeight = 0;
+        let isKeyboardOpen = false;
+        let modalContent = null;
+        let originalModalPosition = null;
+        
+        // Reposition modal above keyboard
+        function repositionModalForKeyboard() {
+            const modal = document.getElementById('connect-modal');
+            modalContent = document.querySelector('.modal-content');
+            
+            if (!modal || !modalContent) return;
+            
+            // Store original position if not stored
+            if (!originalModalPosition) {
+                originalModalPosition = {
+                    position: modalContent.style.position || '',
+                    bottom: modalContent.style.bottom || '',
+                    top: modalContent.style.top || '',
+                    left: modalContent.style.left || '',
+                    transform: modalContent.style.transform || '',
+                    maxHeight: modalContent.style.maxHeight || ''
+                };
+            }
+            
+            // Get the kioskboard element height directly
+            const kioskboard = document.querySelector('#KioskBoard-VirtualKeyboard');
+            let keyboardHeight = 0;
+            
+            if (kioskboard && kioskboard.offsetHeight > 0) {
+                // Keyboard is visible
+                keyboardHeight = kioskboard.offsetHeight;
+            }
+            
+            if (keyboardHeight > 100) { // Keyboard is open
+                isKeyboardOpen = true;
+                
+                // Force modal to be above keyboard
+                modalContent.style.position = 'fixed';
+                modalContent.style.bottom = (keyboardHeight + 20) + 'px'; // Add 20px padding
+                modalContent.style.top = 'auto';
+                modalContent.style.left = '50%';
+                modalContent.style.transform = 'translateX(-50%)';
+                modalContent.style.maxHeight = `${window.innerHeight - keyboardHeight - 30}px`;
+                modalContent.style.zIndex = '9999';
+            }
+        }
+        
+        // Reset modal to original position
+        function resetModalPosition() {
+            const modal = document.getElementById('connect-modal');
+            if (!modalContent || !originalModalPosition) return;
+            
+            isKeyboardOpen = false;
+            
+            // Restore original styles
+            modalContent.style.position = originalModalPosition.position;
+            modalContent.style.bottom = originalModalPosition.bottom;
+            modalContent.style.top = originalModalPosition.top;
+            modalContent.style.left = originalModalPosition.left;
+            modalContent.style.transform = originalModalPosition.transform;
+            modalContent.style.maxHeight = originalModalPosition.maxHeight;
+            modalContent.style.zIndex = '';
+            
+            originalModalPosition = null;
+        }
     </script>
     <!-- kioskboard -->
+    <link rel="stylesheet" href="./ui/public/static/css/kioskboard-2.3.0.min.css">
+    <script src="./ui/public/static/js/kioskboard-aio.min.js"></script>
+    <script>
+        // Initialize KioskBoard when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize kioskboard for password inputs
+            window.initKeyboardForModal = function() {
+                const passwordInput = document.querySelector('#connect-password');
+                
+                // Check if already initialized
+                if (passwordInput && !passwordInput._kioskBoardInitialized) {
+                    KioskBoard.run('.connect-password', {
+                        theme: 'dark',
+                        capsLockActive: false,
+                        allowRealKeyboard: true,
+                        allowMobileKeyboard: false,
+                        cssAnimations: true,
+                        cssAnimationsDuration: 360,
+                        cssAnimationsStyle: 'slide',
+                        keysArrayOfObjects: null,
+                        keysJsonUrl: null,
+                        keysSpecialCharsArrayOfStrings: ['!', '#', '$', '%', '&', '*', '+', '-', '=', '?', '@', '^', '_', '|', '~'],
+                        keysNumpadArrayOfNumbers: [1, 2, 3, 4, 5, 6, 7, 8, 9, 0],
+                        language: 'en',
+                        autoScroll: false,
+                        
+                        // Callback when keyboard opens
+                        onShow: function() {
+                            setTimeout(() => {
+                                repositionModalForKeyboard();
+                            }, 100);
+                        },
+                        
+                        // Callback when keyboard closes
+                        onHide: function() {
+                            setTimeout(() => {
+                                resetModalPosition();
+                            }, 100);
+                        }
+                    });
+                    passwordInput._kioskBoardInitialized = true;
+                    
+                    // Also use MutationObserver as a fallback to detect keyboard
+                    const observer = new MutationObserver(function(mutations) {
+                        const kioskboard = document.querySelector('#KioskBoard-VirtualKeyboard');
+                        if (kioskboard) {
+                            // Check if keyboard is visible
+                            const isVisible = kioskboard.style.visibility !== 'hidden' && 
+                                            kioskboard.style.display !== 'none' &&
+                                            kioskboard.offsetHeight > 0;
+                            
+                            if (isVisible) {
+                                // Keyboard appeared, reposition modal
+                                setTimeout(() => {
+                                    repositionModalForKeyboard();
+                                }, 200);
+                            }
+                        }
+                    });
+                    
+                    // Start observing the body for changes
+                    observer.observe(document.body, {
+                        childList: true,
+                        subtree: true,
+                        attributes: true,
+                        attributeFilter: ['style', 'class']
+                    });
+                    
+                    // Store observer to disconnect later if needed
+                    window._kioskboardObserver = observer;
+                }
+            };
+        });
+    </script>
     <!-- keyboard -->
 </body>
 </html>
