@@ -2,6 +2,9 @@
 if (!window.KioskBoardInitialized) {
     window.KioskBoardInitialized = true;
     
+    // Global flag to ensure single initialization
+    window.KioskBoardPasswordInitialized = false;
+    
     // Initialize KioskBoard configuration (only once)
     KioskBoard.init({
         keysArrayOfObjects: [
@@ -53,42 +56,28 @@ if (!window.KioskBoardInitialized) {
     
     // Expose function to initialize keyboard on modal
     window.initKeyboardForModal = function() {
-        // Find the password input
-        const input = document.querySelector('#connect-password');
+        // Absolute single initialization check
+        if (window.KioskBoardPasswordInitialized) {
+            console.log('KioskBoard already initialized (global check)');
+            return;
+        }
+        
+        // Find the password input using class selector
+        const input = document.querySelector('.connect-password');
         if (!input) {
             console.log('Password input not found');
             return;
         }
         
-        // Check if KioskBoard was already initialized on this element instance
-        // Using a property on the element itself to track initialization
-        if (input._kioskBoardInitialized === true) {
-            console.log('KioskBoard already initialized on this input');
-            return;
-        }
+        // Set the global flag BEFORE calling KioskBoard.run
+        // This prevents ANY possibility of double initialization
+        window.KioskBoardPasswordInitialized = true;
         
-        // Mark this specific element instance as initialized
-        input._kioskBoardInitialized = true;
-        
-        // Run KioskBoard on this input
-        console.log('Initializing KioskBoard on password input');
-        KioskBoard.run('#connect-password');
+        // Run KioskBoard on this input ONLY ONCE using class selector
+        console.log('Initializing KioskBoard on password input (ONCE)');
+        KioskBoard.run('.connect-password');
     };
     
-    // Also try to initialize on any existing inputs (for non-modal cases)
-    // This handles any inputs that might already be in the DOM
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function() {
-            const existingInputs = document.querySelectorAll('.js-kioskboard-input');
-            if (existingInputs.length > 0) {
-                KioskBoard.run('.js-kioskboard-input');
-            }
-        });
-    } else {
-        // DOM already loaded
-        const existingInputs = document.querySelectorAll('.js-kioskboard-input');
-        if (existingInputs.length > 0) {
-            KioskBoard.run('.js-kioskboard-input');
-        }
-    }
+    // Removed automatic initialization to prevent any interference
+    // All initialization now happens explicitly through initKeyboardForModal()
 }
