@@ -1377,10 +1377,25 @@
             }
             
             document.getElementById('connect-modal').style.display = 'flex';
+            
+            // Initialize keyboard for this modal instance
+            if (window.initKeyboardForModal) {
+                // Small delay to ensure DOM is fully rendered
+                setTimeout(function() {
+                    window.initKeyboardForModal();
+                }, 100);
+            }
         }
 
         function closeModal() {
             document.getElementById('connect-modal').style.display = 'none';
+            
+            // Clear the initialization flag when modal closes
+            // This ensures keyboard will be re-initialized if modal is recreated
+            const input = document.querySelector('#connect-password');
+            if (input) {
+                input._kioskBoardInitialized = false;
+            }
         }
 
         document.getElementById('connect-form').addEventListener('submit', async function(e) {
