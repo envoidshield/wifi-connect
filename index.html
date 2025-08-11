@@ -976,7 +976,7 @@
                 <div class="form-group" id="password-group">
                     <label>Password:</label>
                     <input type="password" id="connect-password" 
-                    class="form-control js-kioskboard-input"
+                    class="form-control"
                     data-kioskboard-type="all"
                     data-kioskboard-specialcharacters="true"
                     placeholder="Enter network password">
@@ -1390,12 +1390,8 @@
         function closeModal() {
             document.getElementById('connect-modal').style.display = 'none';
             
-            // Clear the initialization flag when modal closes
-            // This ensures keyboard will be re-initialized if modal is recreated
-            const input = document.querySelector('#connect-password');
-            if (input) {
-                input._kioskBoardInitialized = false;
-            }
+            // Keep the keyboard initialized - do not reset the flag
+            // This prevents duplicate event listeners from being added
         }
 
         document.getElementById('connect-form').addEventListener('submit', async function(e) {
