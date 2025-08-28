@@ -1,73 +1,44 @@
-ARG BALENA_ARCH=%%BALENA_ARCH%%
-# Stage 1: Builder
-FROM balenalib/$BALENA_ARCH-debian as builder
+# Simple, small Python base
+FROM python:3.12-slim
 
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PORTAL_LISTENING_PORT=8080 \
+    ACTIVITY_TIMEOUT=120 \
+    DEBIAN_FRONTEND=noninteractive
+
+# System deps your stack likely needs
+# (drop ones you don't actually use)
 RUN apt-get update && apt-get upgrade -y && \
-    apt-get install -y -q build-essential curl pkg-config libssl-dev libdbus-1-dev libclang-dev clang
+    apt-get install -y --no-install-recommends \
+        dnsmasq \
+        wireless-tools \
+        iptables \
+        iproute2 \
+        ca-certificates \
+        curl \
+        network-manager \
+        iw \ 
+    && rm -rf /var/lib/apt/lists/*
 
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.80.0
-ENV PATH="/root/.cargo/bin:${PATH}"
-
-# Create a new empty shell project
-RUN USER=root cargo new --bin wifi-connect
-WORKDIR /myapp
-
-# Copy the Cargo.toml and Cargo.lock
-COPY wifi-connect/Cargo.toml wifi-connect/Cargo.lock ./
-
-# Copy the source code
-COPY wifi-connect/src ./src
-
-# This step builds the dependencies (and only the dependencies)
-RUN cargo build --release
-
-# Build the application
-RUN cargo build --release --verbose
-
-# Stage 2: Runner
-FROM balenalib/$BALENA_ARCH-debian
-
-RUN apt-get update && apt-get upgrade -y && \
-  install_packages dnsmasq wireless-tools python3 iptables
-
-# use latest version. If specific version is required, it should be provided as vX.Y.Z, e.g v4.11.37
-ARG VERSION="latest"
-ENV PORTAL_LISTENING_PORT=8080
-ENV ACTIVITY_TIMEOUT=120
 WORKDIR /usr/src/app
 
-#RUN \
-#    export BASE_URL="https://github.com/balena-os/wifi-connect/releases" &&\    
-#    case $BALENA_ARCH in \
-#        "aarch64") \
-#            BINARY_ARCH_NAME="aarch64-unknown-linux-gnu" ;; \
-#        "amd64") \
-#            BINARY_ARCH_NAME="x86_64-unknown-linux-gnu" ;;\
-#        "armv7hf") \
-#            BINARY_ARCH_NAME="armv7-unknown-linux-gnueabihf" ;;\
-#        *) \
-#            echo >&2 "error: unsupported architecture ($BALENA_ARCH)"; exit 1 ;; \ 
-#    esac;\
-#    if [ ${VERSION} = "latest" ]; then \
-#        export URL_PARTIAL="latest/download" ; \
-#    else \
-#        export URL_PARTIAL="download/${VERSION}" ; \
-#    fi; \
-#    curl -Ls "$BASE_URL/$URL_PARTIAL/wifi-connect-$BINARY_ARCH_NAME.tar.gz" \
-#    | tar -xvz -C  /usr/src/app/
+# ---- Python deps first (better caching)
+COPY requirements.txt .
+RUN pip install -r requirements.txt
 
-# Copy the compiled binary from the builder stage
-COPY --from=builder /myapp/target/release/wifi-connect .
+# ---- App files
+# Adjust these paths to match your repo layout
+COPY wifi-connect/start.sh .
+COPY wifi-connect/wifi_api_server.py .
+COPY wifi-connect/config.py .
+COPY wifi-connect/config_util.py .
+COPY wifi-connect/test_api.py .
 
-COPY wifi-connect/scripts/start.sh .
-COPY wifi-connect/scripts/api.py .
+# Optional scripts
 COPY wifi-connect/scripts/block-peers.sh .
-RUN chmod +x block-peers.sh
+RUN chmod +x start.sh block-peers.sh
 
-COPY wifi-connect/ui/build ui
-COPY wifi-connect/ui/public/static ui/public/static
-COPY wifi-connect/index.html .
-COPY wifi-connect/ui/build/index.html ui/index
+# Run the API server
+CMD ["python", "-u", "wifi_api_server.py"]
 
-
-CMD ["bash", "start.sh"]
