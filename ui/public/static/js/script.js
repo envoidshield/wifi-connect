@@ -537,7 +537,6 @@ async function toggleWiFiDirect() {
         const data = await response.json();
         wifiDirect = data.value === 'true';
         updateWiFiDirectUI(wifiDirect);
-        
         // Add haptic feedback for mobile devices
         if (navigator.vibrate) {
             navigator.vibrate(50);
@@ -708,29 +707,7 @@ document.getElementById('connect-modal').addEventListener('click', function(e) {
 // Prevent zoom on iOS when focusing input fields
 document.addEventListener('touchstart', function() {}, {passive: true});
 
-// Add mock data for local testing
-window.mockNetworks = [
-    { ssid: 'Home WiFi 5G', security: 'wpa2' },
-    { ssid: 'Guest Network', security: 'open' },
-    { ssid: 'Office Secure', security: 'wpa2' },
-    { ssid: 'Cafe Free WiFi', security: 'open' },
-    { ssid: 'Neighbor Network', security: 'wpa' }
-];
-
 // Override refreshNetworks for local testing when server is not available
-const originalRefreshNetworks = window.refreshNetworks;
-window.refreshNetworks = async function() {
-    const container = document.getElementById('available-networks');
-    
-    // Try original first
-    try {
-        await originalRefreshNetworks();
-    } catch (error) {
-        // If server is not available, use mock data
-        console.log('Using mock network data for testing');
-        window.renderAvailableNetworks(window.mockNetworks);
-    }
-};
 // Keyboard detection and modal repositioning
 let keyboardHeight = 0;
 let isKeyboardOpen = false;
