@@ -30,6 +30,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Global cached WiFi interface - initialized at startup for efficiency
+_cached_wifi_interface: Optional[str] = None
+
 # Create FastAPI app
 app = FastAPI(
     title="WiFi Connect API",
@@ -145,8 +148,8 @@ def run_command(command: List[str], timeout: int = None) -> Dict[str, Any]:
             "output": ""
         }
 
-def get_wifi_interface() -> Optional[str]:
-    """Get the primary WiFi interface name"""
+def _detect_wifi_interface() -> Optional[str]:
+    """Detect the primary WiFi interface name"""
     try:
         # Get network interfaces
         result = run_command(["nmcli", "-t", "-f", "DEVICE,TYPE", "device", "show"])
@@ -165,8 +168,31 @@ def get_wifi_interface() -> Optional[str]:
         
         return None
     except Exception as e:
-        logger.error(f"Error getting WiFi interface: {e}")
+        logger.error(f"Error detecting WiFi interface: {e}")
         return None
+
+def initialize_wifi_interface():
+    """Initialize the cached WiFi interface at startup"""
+    global _cached_wifi_interface
+    logger.info("Detecting WiFi interface...")
+    _cached_wifi_interface = _detect_wifi_interface()
+    if _cached_wifi_interface:
+        logger.info(f"WiFi interface detected: {_cached_wifi_interface}")
+    else:
+        logger.warning("No WiFi interface detected")
+
+def get_wifi_interface() -> Optional[str]:
+    """Get the cached WiFi interface name with fallback to re-detection"""
+    global _cached_wifi_interface
+    
+    # Return cached interface if available
+    if _cached_wifi_interface:
+        return _cached_wifi_interface
+    
+    # Fallback: re-detect interface if cache is empty
+    logger.warning("WiFi interface cache is empty, re-detecting...")
+    _cached_wifi_interface = _detect_wifi_interface()
+    return _cached_wifi_interface
 
 def parse_network_security(security_info: str) -> str:
     """Parse security information from nmcli output"""
@@ -249,51 +275,63 @@ async def get_wifi_direct() -> WiFiDirectResponse:
         raise HTTPException(status_code=500, detail="Failed to get WiFi Direct status")
 
 @app.post("/set-wifi-direct")
-async def set_wifi_direct(request: WiFiDirectRequest, background_tasks: BackgroundTasks):
+async def set_wifi_direct(request: WiFiDirectRequest):
     """Toggle WiFi Direct mode"""
     try:
         value = request.value.lower() == "true"
+        wifi_config = config.get_wifi_config()
+        hotspot_name = wifi_config["hotspot_name_prefix"]
+        connection_name = config.get_connection_name()
         
         if value:
             # Enable WiFi Direct (create hotspot)
             wifi_interface = get_wifi_interface()
             if not wifi_interface:
                 raise HTTPException(status_code=500, detail="No WiFi interface found")
+            # Check if hotspot connection already exists
+            check_result = run_command(["nmcli", "connection", "show", hotspot_name])
             
-            # Create hotspot connection
-            wifi_config = config.get_wifi_config()
-            hotspot_name = f"{wifi_config['hotspot_name_prefix']}-{int(time.time())}"
-            result = run_command([
-                "nmcli", "device", "wifi", "hotspot", 
-                "ifname", wifi_interface,
-                "con-name", hotspot_name,
-                "ssid", hotspot_name,
-                "password", wifi_config["hotspot_password"]
-            ])
+            if not check_result["success"]:
+                # Connection doesn't exist, create it
+                result = run_command([
+                    "nmcli", 
+                    "connection", "add", 
+                    "type", "wifi",
+                    "mode", "ap",
+                    "ifname", wifi_interface,
+                    "con-name", connection_name,
+                    "ssid", hotspot_name,
+                    "802-11-wireless-security.key-mgmt", "wpa-psk",
+                    "802-11-wireless-security.psk", wifi_config["hotspot_password"],
+                    "802-11-wireless.mode", "ap",
+                    "802-11-wireless.band", "bg",
+                    "802-11-wireless.channel", "6",
+                    "ipv4.method", "shared",
+                    "ipv4.addresses", "192.168.42.1/24",
+                    "ipv6.method", "ignore",
+                ])
+                
+                if not result["success"]:
+                    raise HTTPException(status_code=500, detail="Failed to create WiFi Direct hotspot")
             
-            if not result["success"]:
-                raise HTTPException(status_code=500, detail="Failed to create WiFi Direct hotspot")
-            
-            # Start the hotspot
-            start_result = run_command(["nmcli", "connection", "up", hotspot_name])
+            # Start/activate the hotspot connection and enable autoconnect
+            # Enable autoconnect when turning on
+            run_command(["nmcli", "connection", "modify", connection_name, "connection.autoconnect", "yes"])
+            start_result = run_command(["nmcli", "connection", "up", connection_name])
             if not start_result["success"]:
                 raise HTTPException(status_code=500, detail="Failed to start WiFi Direct hotspot")
         else:
             # Disable WiFi Direct (stop hotspot)
-            hotspot_result = run_command(["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show", "--active"])
-            if hotspot_result["success"]:
-                for line in hotspot_result["output"].split('\n'):
-                    if line and 'hotspot' in line.lower():
-                        connection_name = line.split(':')[0]
-                        run_command(["nmcli", "connection", "down", connection_name])
-                        run_command(["nmcli", "connection", "delete", connection_name])
-        
+            hotspot_name = f"{wifi_config['hotspot_name_prefix']}-hotspot"
+            
+            run_command(["nmcli", "connection", "modify", hotspot_name, "connection.autoconnect", "no"])
+            down_result = run_command(["nmcli", "connection", "down", hotspot_name])
+            
         return WiFiDirectResponse(value=value)
     except Exception as e:
         logger.error(f"Error setting WiFi Direct: {e}")
-        raise HTTPException(status_code=500, detail="Failed to set WiFi Direct mode")
+        raise HTTPException(status_code=500, detail="Failed to set WiFi Direct mode"))
 
-@app.get("/list-networks")
 async def list_networks(use_cache: bool = True):
     """List available WiFi networks"""
     try:
@@ -541,26 +579,11 @@ async def forget_all_networks(request: ForgetAllRequest):
         return SuccessResponse(success=False, message="Failed to forget all networks")
 
 if __name__ == "__main__":
-    # Check if running with sudo/root privileges
-    if os.geteuid() != 0:
-        logger.warning("This application may need root privileges to manage WiFi connections")
-        logger.warning("Run with: sudo python3 wifi_api_server.py")
-    
-    # Check if required tools are available
-    required_tools = ["nmcli", "iw"]
-    missing_tools = []
-    
-    for tool in required_tools:
-        result = run_command([tool, "--version"])
-        if not result["success"]:
-            missing_tools.append(tool)
-    
-    if missing_tools:
-        logger.error(f"Missing required tools: {', '.join(missing_tools)}")
-        logger.error("Please install NetworkManager and iw tools")
-        exit(1)
-    
     logger.info("Starting WiFi API Server...")
+    
+    # Initialize WiFi interface cache at startup for efficiency
+    initialize_wifi_interface()
+    
     server_config = config.get_server_config()
     logger.info(f"Server will run on {server_config['host']}:{server_config['port']}")
     logger.info(f"Access the WiFi Connect interface at: http://{server_config['host']}:{server_config['port']}")
