@@ -78,14 +78,18 @@ class ConnectedNetwork(BaseModel):
     ssid: str
     interface: str
     security: str
-    signal_strength: int
-    ip_address: Optional[str] = None
 
 class SavedNetwork(BaseModel):
     ssid: str
     security: str
 
 class WiFiDirectResponse(BaseModel):
+    value: bool
+
+class WiFiConnectRequest(BaseModel):
+    value: str
+
+class WiFiConnectResponse(BaseModel):
     value: bool
 
 class NetworksResponse(BaseModel):
@@ -152,7 +156,7 @@ def _detect_wifi_interface() -> Optional[str]:
     """Detect the primary WiFi interface name"""
     try:
         # Get network interfaces
-        result = run_command(["nmcli", "-t", "-f", "DEVICE,TYPE", "device", "show"])
+        result = run_command(["nmcli", "-t", "-f", "DEVICE,TYPE", "device", "status"])
         if not result["success"]:
             return None
         
@@ -253,47 +257,53 @@ async def health_check():
         logger.error(f"Health check failed: {e}")
         raise HTTPException(status_code=503, detail="Service unavailable")
 
-@app.get("/get-wifi-direct")
-async def get_wifi_direct() -> WiFiDirectResponse:
-    """Get WiFi Direct status"""
+async def manage_wifi_connection(connection_type: str, enable: bool) -> dict:
+    """
+    General function to manage WiFi connections (direct/connect mode)
+    
+    Args:
+        connection_type: "direct" or "connect"
+        enable: True to enable, False to disable
+    
+    Returns:
+        dict: {"success": bool, "message": str}
+    """
     try:
-        # Check if WiFi Direct is enabled by looking for hotspot mode
-        result = run_command(["nmcli", "radio", "wifi"])
-        if not result["success"]:
-            raise HTTPException(status_code=500, detail="Failed to check WiFi status")
+        # Get appropriate config based on connection type
+        if connection_type == "direct":
+            wifi_config = config.get_direct_config()
+            mode_name = "WiFi Direct"
+        elif connection_type == "connect":
+            wifi_config = config.get_connect_config()
+            mode_name = "WiFi Connect"
+        else:
+            return {
+                "success": False,
+                "message": f"Invalid connection type: {connection_type}"
+            }
         
-        # Check if there's an active hotspot connection
-        hotspot_result = run_command(["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show", "--active"])
-        if hotspot_result["success"]:
-            for line in hotspot_result["output"].split('\n'):
-                if line and 'hotspot' in line.lower():
-                    return WiFiDirectResponse(value=True)
+        hotspot_name = wifi_config["hotspot_name"]
+        connection_name = wifi_config["connection_name"]
+        wifi_interface = get_wifi_interface()
         
-        return WiFiDirectResponse(value=False)
-    except Exception as e:
-        logger.error(f"Error getting WiFi Direct status: {e}")
-        raise HTTPException(status_code=500, detail="Failed to get WiFi Direct status")
-
-@app.post("/set-wifi-direct")
-async def set_wifi_direct(request: WiFiDirectRequest):
-    """Toggle WiFi Direct mode"""
-    try:
-        value = request.value.lower() == "true"
-        wifi_config = config.get_wifi_config()
-        hotspot_name = wifi_config["hotspot_name_prefix"]
-        connection_name = config.get_connection_name()
+        if not wifi_interface:
+            return {
+                "success": False,
+                "message": "No WiFi interface found"
+            }
         
-        if value:
-            # Enable WiFi Direct (create hotspot)
-            wifi_interface = get_wifi_interface()
-            if not wifi_interface:
-                raise HTTPException(status_code=500, detail="No WiFi interface found")
+        if enable:
+            # Enable the connection (create hotspot)
+            logger.info(f"Enabling {mode_name} mode")
+            
             # Check if hotspot connection already exists
-            check_result = run_command(["nmcli", "connection", "show", hotspot_name])
+            check_result = run_command(["nmcli", "connection", "show", connection_name])
             
             if not check_result["success"]:
                 # Connection doesn't exist, create it
-                result = run_command([
+                logger.info(f"Creating new {mode_name} connection: {connection_name}")
+                
+                create_cmd = [
                     "nmcli", 
                     "connection", "add", 
                     "type", "wifi",
@@ -301,37 +311,182 @@ async def set_wifi_direct(request: WiFiDirectRequest):
                     "ifname", wifi_interface,
                     "con-name", connection_name,
                     "ssid", hotspot_name,
-                    "802-11-wireless-security.key-mgmt", "wpa-psk",
-                    "802-11-wireless-security.psk", wifi_config["hotspot_password"],
                     "802-11-wireless.mode", "ap",
                     "802-11-wireless.band", "bg",
                     "802-11-wireless.channel", "6",
                     "ipv4.method", "shared",
                     "ipv4.addresses", "192.168.42.1/24",
                     "ipv6.method", "ignore",
-                ])
+                ]
                 
+                result = run_command(create_cmd)
                 if not result["success"]:
-                    raise HTTPException(status_code=500, detail="Failed to create WiFi Direct hotspot")
+                    return {
+                        "success": False,
+                        "message": f"Failed to create {mode_name} hotspot: {result.get('error', 'Unknown error')}"
+                    }
             
-            # Start/activate the hotspot connection and enable autoconnect
-            # Enable autoconnect when turning on
-            run_command(["nmcli", "connection", "modify", connection_name, "connection.autoconnect", "yes"])
+            # Enable autoconnect and start the hotspot connection
+            autoconnect_result = run_command([
+                "nmcli", "connection", "modify", connection_name, 
+                "connection.autoconnect", "yes"
+            ])
+            
             start_result = run_command(["nmcli", "connection", "up", connection_name])
             if not start_result["success"]:
-                raise HTTPException(status_code=500, detail="Failed to start WiFi Direct hotspot")
+                return {
+                    "success": False,
+                    "message": f"Failed to start {mode_name} hotspot: {start_result.get('error', 'Unknown error')}"
+                }
+            
+            logger.info(f"{mode_name} mode enabled successfully")
+            return {
+                "success": True,
+                "message": f"{mode_name} mode enabled successfully"
+            }
+            
         else:
-            # Disable WiFi Direct (stop hotspot)
-            hotspot_name = f"{wifi_config['hotspot_name_prefix']}-hotspot"
+            # Disable the connection
+            logger.info(f"Disabling {mode_name} mode")
             
-            run_command(["nmcli", "connection", "modify", hotspot_name, "connection.autoconnect", "no"])
-            down_result = run_command(["nmcli", "connection", "down", hotspot_name])
+            # Disable autoconnect
+            run_command([
+                "nmcli", "connection", "modify", connection_name, 
+                "connection.autoconnect", "no"
+            ])
             
+            # Stop the connection
+            down_result = run_command(["nmcli", "connection", "down", connection_name])
+            if not down_result["success"]:
+                return {
+                    "success": False,
+                    "message": f"Failed to stop {mode_name} hotspot: {down_result.get('error', 'Unknown error')}"
+                }
+            
+            logger.info(f"{mode_name} mode disabled successfully")
+            return {
+                "success": True,
+                "message": f"{mode_name} mode disabled successfully"
+            }
+            
+    except Exception as e:
+        logger.error(f"Error managing {connection_type} connection: {e}")
+        return {
+            "success": False,
+            "message": f"Failed to manage {connection_type} connection: {str(e)}"
+        }
+
+
+@app.post("/set-wifi-direct")
+async def set_wifi_direct(request: WiFiDirectRequest):
+    """Toggle WiFi Direct mode"""
+    try:
+        value = request.value.lower() == "true"
+        result = await manage_wifi_connection("direct", value)
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["message"])
+        
         return WiFiDirectResponse(value=value)
+        
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error setting WiFi Direct: {e}")
-        raise HTTPException(status_code=500, detail="Failed to set WiFi Direct mode"))
+        raise HTTPException(status_code=500, detail="Failed to set WiFi Direct mode")
 
+
+@app.post("/set-wifi-connect")
+async def set_wifi_connect(request: WiFiConnectRequest):
+    """Toggle WiFi Connect mode"""
+    try:
+        value = request.value.lower() == "true"
+        result = await manage_wifi_connection("connect", value)
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["message"])
+        
+        return WiFiConnectResponse(value=value)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error setting WiFi Connect: {e}")
+        raise HTTPException(status_code=500, detail="Failed to set WiFi Connect mode")
+
+
+# Alternative approach - if you want separate functions for each mode
+async def enable_wifi_direct() -> dict:
+    """Enable WiFi Direct mode"""
+    return await manage_wifi_connection("direct", True)
+
+
+async def disable_wifi_direct() -> dict:
+    """Disable WiFi Direct mode"""
+    return await manage_wifi_connection("direct", False)
+
+
+async def enable_wifi_connect() -> dict:
+    """Enable WiFi Connect mode"""
+    return await manage_wifi_connection("connect", True)
+
+
+async def disable_wifi_connect() -> dict:
+    """Disable WiFi Connect mode"""
+    return await manage_wifi_connection("connect", False)
+
+
+# Utility function to get current connection status
+async def get_connection_status(connection_type: str) -> dict:
+    """
+    Get the current status of a WiFi connection
+    
+    Args:
+        connection_type: "direct" or "connect"
+    
+    Returns:
+        dict: {"active": bool, "connection_name": str, "message": str}
+    """
+    try:
+        if connection_type == "direct":
+            wifi_config = config.get_direct_config()
+        elif connection_type == "connect":
+            wifi_config = config.get_connect_config()
+        else:
+            return {"active": False, "connection_name": "", "message": "Invalid connection type"}
+        
+        connection_name = wifi_config["connection_name"]
+        
+        # Check if connection is active
+        result = run_command([
+            "nmcli", "-t", "-f", "NAME,STATE", "connection", "show", "--active"
+        ])
+        
+        if result["success"]:
+            active_connections = result["output"].split('\n')
+            for conn in active_connections:
+                if conn.startswith(f"{connection_name}:"):
+                    return {
+                        "active": True, 
+                        "connection_name": connection_name,
+                        "message": f"{connection_type} mode is active"
+                    }
+        
+        return {
+            "active": False, 
+            "connection_name": connection_name,
+            "message": f"{connection_type} mode is inactive"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting {connection_type} status: {e}")
+        return {
+            "active": False, 
+            "connection_name": "",
+            "message": f"Error checking {connection_type} status"
+        }
+
+app.get("/list-networks")
 async def list_networks(use_cache: bool = True):
     """List available WiFi networks"""
     try:
@@ -387,77 +542,74 @@ async def list_networks(use_cache: bool = True):
 
 @app.get("/list-connected")
 async def list_connected():
-    """Get currently connected network information"""
+    """Get currently connected Wi-Fi network info (ssid/interface/security)."""
     try:
-        # Get active connections
+        # 1) Find the active Wi-Fi connection + interface
         result = run_command([
-            "nmcli", "-t", "-f", "NAME,TYPE,DEVICE", 
+            "nmcli", "-t", "-f", "NAME,TYPE,DEVICE",
             "connection", "show", "--active"
         ])
-        
-        if not result["success"]:
+        if not result["success"] or not result["output"]:
             return ConnectedResponse(connected=None)
-        
+
         wifi_interface = None
         connection_name = None
-        
-        for line in result["output"].split('\n'):
-            if line and '\n' not in line:
-                parts = line.split(':')
-                if len(parts) >= 3:
-                    name = parts[0]
-                    conn_type = parts[1]
-                    device = parts[2]
-                    
-                    if conn_type == "wifi":
-                        wifi_interface = device
-                        connection_name = name
-                        break
-        
+
+        for line in result["output"].splitlines():
+            line = line.strip()
+            if not line or line.startswith("Warning:"):
+                continue
+            parts = line.split(":")
+            if len(parts) >= 3:
+                name, conn_type, device = parts[0], parts[1], parts[2]
+                if conn_type in ("wifi", "802-11-wireless"):
+                    wifi_interface = device
+                    connection_name = name
+                    break
+
         if not wifi_interface or not connection_name:
             return ConnectedResponse(connected=None)
-        
-        # Get detailed connection info
+
+        # 2) Read details from the profile itself (valid sections only)
         detail_result = run_command([
-            "nmcli", "-t", "-f", "GENERAL.CONNECTION,GENERAL.DEVICES,802-11-WIRELESS.SSID,802-11-WIRELESS.SECURITY,802-11-WIRELESS.SIGNAL,IP4.ADDRESS",
+            "nmcli", "-t",
+            "-f", "GENERAL,802-11-wireless,802-11-wireless-security",
             "connection", "show", connection_name
         ])
-        
-        if not detail_result["success"]:
+        if not detail_result["success"] or not detail_result["output"]:
             return ConnectedResponse(connected=None)
-        
-        # Parse connection details
-        details = {}
-        for line in detail_result["output"].split('\n'):
-            if line and ':' in line:
-                key, value = line.split(':', 1)
-                details[key] = value
-        
-        # Get signal strength using iw
-        signal_strength = 0
-        if wifi_interface:
-            iw_result = run_command(["iw", "dev", wifi_interface, "link"])
-            if iw_result["success"]:
-                signal_match = re.search(r'signal: (-\d+) dBm', iw_result["output"])
-                if signal_match:
-                    signal_strength = parse_signal_strength(signal_match.group(1) + " dBm")
-        
-        # Extract IP address
-        ip_address = None
-        if "IP4.ADDRESS" in details:
-            ip_match = re.search(r'(\d+\.\d+\.\d+\.\d+)', details["IP4.ADDRESS"])
-            if ip_match:
-                ip_address = ip_match.group(1)
-        
+
+        ssid = ""
+        interface = ""
+        security = "open"
+
+        for line in detail_result["output"].splitlines():
+            line = line.strip()
+            if not line or line.startswith("Warning:") or ":" not in line:
+                continue
+            key, value = line.split(":", 1)
+            key = key.strip().lower()
+            value = value.strip()
+
+            if key == "802-11-wireless.ssid":
+                ssid = value
+            elif key == "general.devices" and value:
+                interface = value  # prefer DEVICES
+            elif key == "general.ip-iface" and value and not interface:
+                interface = value  # fallback if DEVICES empty
+            elif key == "802-11-wireless-security.key-mgmt":
+                security = parse_network_security(value)
+
+        if not ssid or not interface:
+            return ConnectedResponse(connected=None)
+
         connected_network = ConnectedNetwork(
-            ssid=details.get("802-11-WIRELESS.SSID", ""),
-            interface=wifi_interface,
-            security=parse_network_security(details.get("802-11-WIRELESS.SECURITY", "")),
-            signal_strength=signal_strength,
-            ip_address=ip_address
+            ssid=ssid,
+            interface=interface,
+            security=parse_network_security(security)
         )
-        
         return ConnectedResponse(connected=connected_network)
+
     except Exception as e:
         logger.error(f"Error getting connected network: {e}")
         return ConnectedResponse(connected=None)
@@ -466,8 +618,9 @@ async def list_connected():
 async def list_saved():
     """Get list of saved networks"""
     try:
+        # First, get all wireless connections
         result = run_command([
-            "nmcli", "-t", "-f", "NAME,TYPE,802-11-WIRELESS.SECURITY", 
+            "nmcli", "-t", "-f", "NAME,TYPE", 
             "connection", "show"
         ])
         
@@ -476,14 +629,26 @@ async def list_saved():
         
         saved_networks = []
         for line in result["output"].split('\n'):
-            if line and '\n' not in line:
+            if line and line.strip():
                 parts = line.split(':')
-                if len(parts) >= 3:
+                if len(parts) >= 2:
                     name = parts[0]
                     conn_type = parts[1]
-                    security = parts[2] if len(parts) > 2 else ""
                     
                     if conn_type == "802-11-wireless":
+                        # Get security info for this specific connection
+                        security_result = run_command([
+                            "nmcli", "-t", "-f", "802-11-wireless-security.key-mgmt",
+                            "connection", "show", name
+                        ])
+                        
+                        security = ""
+                        if security_result["success"] and security_result["output"].strip():
+                            # Extract the security value after the colon
+                            security_line = security_result["output"].strip()
+                            if ':' in security_line:
+                                security = security_line.split(':', 1)[1]
+                        
                         saved_networks.append(SavedNetwork(
                             ssid=name,
                             security=parse_network_security(security)
@@ -527,22 +692,56 @@ async def connect_to_network(request: ConnectRequest):
         logger.error(f"Error connecting to network: {e}")
         return SuccessResponse(success=False, message="Connection failed")
 
-@app.post("/forget-network")
-async def forget_network(request: ForgetNetworkRequest):
-    """Remove a saved network"""
+async def forget_network(network_name: str) -> dict:
+    """Remove a specific saved network"""
     try:
-        ssid = request.ssid
+        # First check if the network exists
+        check_result = run_command([
+            "nmcli", "-t", "-f", "NAME", "connection", "show", network_name
+        ])
         
-        # Delete the connection
-        result = run_command(["nmcli", "connection", "delete", ssid])
+        if not check_result["success"]:
+            return {
+                "success": False, 
+                "message": f"Network '{network_name}' not found"
+            }
         
-        if not result["success"]:
-            return SuccessResponse(success=False, message="Failed to forget network")
+        # Delete the network connection
+        delete_result = run_command([
+            "nmcli", "connection", "delete", network_name
+        ])
         
-        return SuccessResponse(success=True, message=f"Forgot network {ssid}")
+        if delete_result["success"]:
+            logger.info(f"Successfully forgot network: {network_name}")
+            return {
+                "success": True, 
+                "message": f"Successfully forgot network '{network_name}'"
+            }
+        else:
+            logger.error(f"Failed to delete network {network_name}: {delete_result['error']}")
+            return {
+                "success": False, 
+                "message": f"Failed to forget network '{network_name}': {delete_result['error']}"
+            }
+            
     except Exception as e:
-        logger.error(f"Error forgetting network: {e}")
-        return SuccessResponse(success=False, message="Failed to forget network")
+        logger.error(f"Error forgetting network {network_name}: {e}")
+        return {
+            "success": False, 
+            "message": f"Error forgetting network '{network_name}': {str(e)}"
+        }
+
+
+
+@app.post("/forget")
+async def forget_network_endpoint(request: ForgetNetworkRequest):
+    """Remove a specific saved network"""
+    result = await forget_network(request.network_name)
+    return SuccessResponse(
+        success=result["success"],
+        message=result["message"]
+    )
+
 
 @app.post("/forget-all")
 async def forget_all_networks(request: ForgetAllRequest):
@@ -558,39 +757,47 @@ async def forget_all_networks(request: ForgetAllRequest):
             return SuccessResponse(success=False, message="Failed to get saved networks")
         
         deleted_count = 0
+        failed_networks = []
+        
         for line in result["output"].split('\n'):
-            if line and '\n' not in line:
+            if line.strip():  # Only process non-empty lines
                 parts = line.split(':')
                 if len(parts) >= 2:
                     name = parts[0]
                     conn_type = parts[1]
                     
+                    # Only process WiFi connections
                     if conn_type == "802-11-wireless":
-                        delete_result = run_command(["nmcli", "connection", "delete", name])
-                        if delete_result["success"]:
+                        forget_result = await forget_network(name)
+                        if forget_result["success"]:
                             deleted_count += 1
+                        else:
+                            failed_networks.append(name)
+        
+        # Prepare response message
+        if failed_networks:
+            message = f"Forgot {deleted_count} networks. Failed to forget: {', '.join(failed_networks)}"
+        else:
+            message = f"Successfully forgot {deleted_count} networks"
         
         return SuccessResponse(
-            success=True, 
-            message=f"Forgot {deleted_count} networks"
+            success=len(failed_networks) == 0,  # Success only if no failures
+            message=message
         )
+        
     except Exception as e:
         logger.error(f"Error forgetting all networks: {e}")
         return SuccessResponse(success=False, message="Failed to forget all networks")
 
 if __name__ == "__main__":
-    logger.info("Starting WiFi API Server...")
-    
-    # Initialize WiFi interface cache at startup for efficiency
+    # Initialize WiFi interface at startup
     initialize_wifi_interface()
     
-    server_config = config.get_server_config()
-    logger.info(f"Server will run on {server_config['host']}:{server_config['port']}")
-    logger.info(f"Access the WiFi Connect interface at: http://{server_config['host']}:{server_config['port']}")
-    
+    # Run the server
     uvicorn.run(
-        app,
-        host=server_config["host"],
-        port=server_config["port"],
-        log_level=server_config["log_level"]
+        app, 
+        host=config.get_server_config()["host"],  # Allow external connections
+        port=config.get_server_config()["port"],       # Default port
+        log_level="info"
     )
+

@@ -4,7 +4,6 @@ Minimal configuration system for WiFi Connect API Server
 Supports environment variables and config file
 """
 
-from _typeshed import Self
 import os
 import json
 from typing import Dict, Any, Optional
@@ -26,18 +25,20 @@ class Config:
                 "port": 8000,
                 "log_level": "info"
             },
-            "wifi": {
-                "hotspot_name_prefix": "WiFiDirect",
-                "scan_timeout": 30,
-                "rescan_delay": 2
-            },
             "cors": {
                 "enabled": True,
                 "origins": ["*"]
             },
-            "connection": {
-                "name": "direct-hotspot"
-            }
+            "wifi": {
+                "hotspot_name": "Envoid-Connect",
+                "scan_timeout": 30,
+                "rescan_delay": 2,
+                "connection_name": "connectInterface"
+            },
+              "direct": {
+                "hotspot_name": "Envoid-Direct",
+                "connection_name": "directInterface"
+              },
         }
         
         # Load from config file if it exists
@@ -115,9 +116,13 @@ class Config:
         """Get server configuration"""
         return self._config["server"]
     
-    def get_wifi_config(self) -> Dict[str, Any]:
+    def get_connect_config(self) -> Dict[str, Any]:
         """Get WiFi configuration"""
         return self._config["wifi"]
+    
+    def get_direct_config(self) -> Dict[str, Any]:
+        """Get WiFi configuration"""
+        return self._config["direct"]
     
     def get_cors_config(self) -> Dict[str, Any]:
         """Get CORS configuration"""

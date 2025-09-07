@@ -5,10 +5,14 @@
     "log_level": "info"
   },
   "wifi": {
-    "hotspot_name_prefix": "WiFiDirect",
-    "hotspot_password": "12345678",
+    "hotspot_name": "Envoid-Connect",
     "scan_timeout": 30,
-    "rescan_delay": 2
+    "rescan_delay": 2,
+    "connection_name": "connectInterface"
+  },
+  "direct": {
+    "hotspot_name": "Envoid-Direct",
+    "connection_name": "directInterface"
   },
   "cors": {
     "enabled": true,

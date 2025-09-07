@@ -17,7 +17,6 @@ RUN apt-get update && apt-get upgrade -y && \
         iproute2 \
         ca-certificates \
         curl \
-        network-manager \
         iw \ 
     && rm -rf /var/lib/apt/lists/*
 
@@ -34,11 +33,13 @@ COPY wifi-connect/wifi_api_server.py .
 COPY wifi-connect/config.py .
 COPY wifi-connect/config_util.py .
 COPY wifi-connect/test_api.py .
-
+COPY wifi-connect/sleep.sh .
+COPY wifi-connect/ui ui/
+COPY wifi-connect/index.html index.html
 # Optional scripts
 COPY wifi-connect/scripts/block-peers.sh .
 RUN chmod +x start.sh block-peers.sh
 
 # Run the API server
-CMD ["python", "-u", "wifi_api_server.py"]
+CMD ["/bin/bash", "sleep.sh"]
 
