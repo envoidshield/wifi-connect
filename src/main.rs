@@ -13,16 +13,9 @@ extern crate serde_derive;
 extern crate clap;
 
 extern crate env_logger;
-extern crate iron;
-extern crate iron_cors;
-extern crate mount;
 extern crate network_manager;
 extern crate nix;
-extern crate params;
-extern crate persistent;
-extern crate router;
 extern crate serde_json;
-extern crate staticfile;
 
 mod config;
 mod dnsmasq;
@@ -31,7 +24,6 @@ mod exit;
 mod logger;
 mod network;
 mod privileges;
-mod server;
 mod hotspot_manager;
 
 use std::io::Write;
@@ -44,7 +36,6 @@ use config::get_config;
 use errors::*;
 use exit::block_exit_signals;
 use hotspot_manager::HotspotManager;
-use network::{init_networking, process_network_commands};
 use privileges::require_root;
 
 fn main() {
@@ -185,7 +176,7 @@ fn run() -> Result<()> {
             
             info!("Connecting to '{}'...", ssid);
             match wifi_device.connect(access_point, &credentials) {
-                Ok((connection, state)) => {
+                Ok((_connection, state)) => {
                     if state == network_manager::ConnectionState::Activated {
                         match network::wait_for_connectivity(&manager, 20) {
                             Ok(has_connectivity) => {
@@ -219,22 +210,8 @@ fn run() -> Result<()> {
         return Ok(());
     }
 
-    // If no specific commands, fall back to original captive portal mode
-    init_networking(&config)?;
-
-    let (exit_tx, exit_rx) = channel();
-
-    thread::spawn(move || {
-        process_network_commands(&config, &exit_tx);
-    });
-
-    match exit_rx.recv() {
-        Ok(result) => result?,
-        Err(e) => {
-            return Err(e.into());
-        }
-    }
-
+    // If no specific commands, show help
+    println!("No command specified. Use --help to see available options.");
     Ok(())
 }
 
@@ -320,46 +297,5 @@ fn handle_restart_hotspot(config: config::Config) -> Result<()> {
     status.print_status();
     
     info!("Hotspot restarted successfully");
-    Ok(())
-}
-
-// Helper function to create a persistent hotspot that stays running
-pub fn run_persistent_hotspot(config: config::Config) -> Result<()> {
-    info!("Starting persistent hotspot '{}'...", config.ssid);
-    
-    let mut hotspot = HotspotManager::new(config.clone())?;
-    hotspot.start_hotspot()?;
-    
-    let status = hotspot.get_hotspot_status();
-    status.print_status();
-    
-    info!("Hotspot running persistently. Press Ctrl+C to stop.");
-    
-    // Set up signal handling for graceful shutdown
-    let (exit_tx, exit_rx) = channel();
-    
-    thread::spawn(move || {
-        if let Err(e) = exit::trap_exit_signals() {
-            error!("Signal handling failed: {}", e);
-            return;
-        }
-        
-        info!("Received shutdown signal");
-        let _ = exit_tx.send(());
-    });
-    
-    // Wait for shutdown signal
-    match exit_rx.recv() {
-        Ok(_) => {
-            info!("Shutting down hotspot...");
-            hotspot.stop_hotspot()?;
-            info!("Hotspot stopped");
-        }
-        Err(e) => {
-            error!("Error waiting for exit signal: {}", e);
-            hotspot.stop_hotspot()?;
-        }
-    }
-    
     Ok(())
 }

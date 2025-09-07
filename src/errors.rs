@@ -1,12 +1,9 @@
 use network_manager;
 
-use network;
-
 error_chain! {
     foreign_links {
         Io(::std::io::Error);
         Recv(::std::sync::mpsc::RecvError);
-        SendNetworkCommand(::std::sync::mpsc::SendError<network::NetworkCommand>);
         Nix(::nix::Error);
     }
 

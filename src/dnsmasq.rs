@@ -38,10 +38,3 @@ pub fn start_dnsmasq(config: &Config, device: &Device) -> Result<Child> {
         .chain_err(|| ErrorKind::Dnsmasq)
 }
 
-pub fn stop_dnsmasq(dnsmasq: &mut Child) -> Result<()> {
-    dnsmasq.kill()?;
-
-    dnsmasq.wait()?;
-
-    Ok(())
-}
