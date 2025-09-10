@@ -63,7 +63,7 @@ class ConnectRequest(BaseModel):
     passphrase: Optional[str] = None
 
 class ForgetNetworkRequest(BaseModel):
-    ssid: str
+    network_name: str
 
 class ForgetAllRequest(BaseModel):
     pass
@@ -486,7 +486,7 @@ async def get_connection_status(connection_type: str) -> dict:
             "message": f"Error checking {connection_type} status"
         }
 
-app.get("/list-networks")
+@app.get("/list-networks")
 async def list_networks(use_cache: bool = True):
     """List available WiFi networks"""
     try:
@@ -697,7 +697,7 @@ async def forget_network(network_name: str) -> dict:
     try:
         # First check if the network exists
         check_result = run_command([
-            "nmcli", "-t", "-f", "NAME", "connection", "show", network_name
+            "nmcli", "-t", "-f", "connection.id", "connection", "show", network_name
         ])
         
         if not check_result["success"]:
@@ -789,6 +789,26 @@ async def forget_all_networks(request: ForgetAllRequest):
         logger.error(f"Error forgetting all networks: {e}")
         return SuccessResponse(success=False, message="Failed to forget all networks")
 
+@app.get("/get-wifi-direct")
+async def get_wifi_direct():
+    """Get current WiFi Direct mode status"""
+    try:
+        result = await get_connection_status("direct")
+        return WiFiDirectResponse(value=result["active"])
+    except Exception as e:
+        logger.error(f"Error getting WiFi Direct status: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get WiFi Direct status")
+
+@app.get("/get-wifi-connect")
+async def get_wifi_connect():
+    """Get current WiFi Connect mode status"""
+    try:
+        result = await get_connection_status("connect")
+        return WiFiConnectResponse(value=result["active"])
+    except Exception as e:
+        logger.error(f"Error getting WiFi Connect status: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get WiFi Connect status")
+        
 if __name__ == "__main__":
     # Initialize WiFi interface at startup
     initialize_wifi_interface()
