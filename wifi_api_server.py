@@ -30,8 +30,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Global cached WiFi interface - initialized at startup for efficiency
-_cached_wifi_interface: Optional[str] = None
 
 # Create FastAPI app
 app = FastAPI(
@@ -53,6 +51,27 @@ if cors_config["enabled"]:
 
 # Mount static files
 app.mount("/ui", StaticFiles(directory="ui"), name="ui")
+
+# Startup event
+@app.on_event("startup")
+async def startup_event():
+    """Initialize WiFi interface and check connectivity at startup"""
+    # Initialize WiFi interface
+    initialize_wifi_interface()
+    
+    # Perform startup WiFi check
+    await startup_wifi_check()
+
+# Shutdown event
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Clean up resources on shutdown"""
+    logger.info("Shutting down WiFi API server...")
+    
+    # Stop dnsmasq if running
+    stop_dnsmasq()
+    
+    logger.info("Shutdown complete")
 
 # Pydantic models
 class WiFiDirectRequest(BaseModel):
@@ -108,6 +127,23 @@ class SuccessResponse(BaseModel):
 class ErrorResponse(BaseModel):
     error: str
     message: str
+
+class ScanStatusResponse(BaseModel):
+    hotspot_active: bool
+    hotspot_type: Optional[str] = None
+    can_scan: bool
+    warning_message: Optional[str] = None
+
+# Global cached WiFi interface - initialized at startup for efficiency
+_cached_wifi_interface: Optional[str] = None
+
+# Global dnsmasq process - managed when WiFi Connect is active
+_dnsmasq_process: Optional[subprocess.Popen] = None
+
+# Global cached networks - stores network list with timestamp
+_cached_networks: Optional[List[NetworkInfo]] = None
+_cached_networks_timestamp: Optional[float] = None
+
 
 # Utility functions
 def run_command(command: List[str], timeout: int = None) -> Dict[str, Any]:
@@ -185,6 +221,87 @@ def initialize_wifi_interface():
     else:
         logger.warning("No WiFi interface detected")
 
+async def startup_wifi_check():
+    """Check WiFi connectivity at startup and start WiFi Connect if needed"""
+    try:
+        # Set startup flag to prevent cache clearing during startup
+        startup_wifi_check._startup_in_progress = True
+        
+        # Check if startup check is enabled
+        if not config.get("wifi.startup_check", True):
+            logger.info("Startup WiFi check is disabled")
+            return
+            
+        logger.info("Performing startup WiFi connectivity check...")
+        
+        # Check if WiFi interface is available
+        wifi_interface = get_wifi_interface()
+        if not wifi_interface:
+            logger.warning("No WiFi interface available, skipping startup check")
+            return
+        
+        # Check if there's already an active WiFi connection using the API endpoint
+        try:
+            connected_response = await list_connected()
+            if hasattr(connected_response, 'connected') and connected_response.connected:
+                logger.info(f"WiFi network already connected to {connected_response.connected.ssid}, no action needed")
+                return
+            else:
+                logger.info("No active WiFi connection found")
+        except Exception as e:
+            logger.warning(f"Could not check connected status: {e}")
+            # Continue with startup check even if we can't determine connection status
+        
+        logger.info("No WiFi connection found, performing network scan...")
+        
+        # Use the list_networks endpoint to scan and cache networks
+        try:
+            networks_response = await list_networks(use_cache=False, force_scan=True)
+            if hasattr(networks_response, 'networks'):
+                networks = networks_response.networks
+                if networks:
+                    logger.info(f"Found {len(networks)} available networks, but none connected")
+                    
+                    # If 1 or fewer networks found, try rescanning up to 5 times
+                    max_retries = 5
+                    retry_count = 0
+                    while len(networks) <= 1 and retry_count < max_retries:
+                        retry_count += 1
+                        logger.info(f"Only {len(networks)} network(s) found, performing rescan attempt {retry_count}/{max_retries}...")
+                        time.sleep(2)  # Wait a bit before rescanning
+                        networks_response = await list_networks(use_cache=False, force_scan=True)
+                        if hasattr(networks_response, 'networks'):
+                            networks = networks_response.networks
+                            logger.info(f"After rescan attempt {retry_count}: Found {len(networks)} available networks")
+                        else:
+                            logger.warning(f"Failed to get networks on rescan attempt {retry_count}")
+                            break
+                    
+                    if retry_count >= max_retries and len(networks) <= 1:
+                        logger.warning(f"After {max_retries} rescan attempts, still only found {len(networks)} network(s)")
+                else:
+                    logger.info("No WiFi networks found in range")
+            else:
+                logger.warning("Failed to get network list from API")
+        except Exception as e:
+            logger.warning(f"Failed to scan networks via API: {e}")
+        
+        # Start WiFi Connect mode since no network is connected
+        logger.info("Starting WiFi Connect mode for network configuration...")
+        connect_result = await manage_wifi_connection("connect", True)
+        
+        if connect_result["success"]:
+            logger.info("WiFi Connect mode started successfully")
+        else:
+            logger.error(f"Failed to start WiFi Connect mode: {connect_result['message']}")
+            
+    except Exception as e:
+        logger.error(f"Error during startup WiFi check: {e}")
+    finally:
+        # Clear startup flag
+        if hasattr(startup_wifi_check, '_startup_in_progress'):
+            delattr(startup_wifi_check, '_startup_in_progress')
+
 def get_wifi_interface() -> Optional[str]:
     """Get the cached WiFi interface name with fallback to re-detection"""
     global _cached_wifi_interface
@@ -197,6 +314,145 @@ def get_wifi_interface() -> Optional[str]:
     logger.warning("WiFi interface cache is empty, re-detecting...")
     _cached_wifi_interface = _detect_wifi_interface()
     return _cached_wifi_interface
+
+def is_cache_valid() -> bool:
+    """Check if the cached networks are still valid"""
+    global _cached_networks, _cached_networks_timestamp
+    
+    if _cached_networks is None or _cached_networks_timestamp is None:
+        return False
+    
+    # Get cache duration from config (default 5 minutes)
+    cache_duration = config.get("wifi.cache_duration", 300)  # 5 minutes
+    current_time = time.time()
+    
+    return (current_time - _cached_networks_timestamp) < cache_duration
+
+def get_cached_networks() -> Optional[List[NetworkInfo]]:
+    """Get cached networks if they are still valid"""
+    if is_cache_valid():
+        logger.info(f"get_cached_networks: Returning {len(_cached_networks)} cached networks")
+        return _cached_networks
+    else:
+        logger.info(f"get_cached_networks: No valid cache found (cache_valid={is_cache_valid()})")
+    return None
+
+def set_cached_networks(networks: List[NetworkInfo]) -> None:
+    """Store networks in cache with current timestamp"""
+    global _cached_networks, _cached_networks_timestamp
+    
+    _cached_networks = networks
+    _cached_networks_timestamp = time.time()
+    logger.info(f"set_cached_networks: Cached {len(networks)} networks at timestamp {_cached_networks_timestamp}")
+
+def clear_network_cache() -> None:
+    """Clear the network cache"""
+    global _cached_networks, _cached_networks_timestamp
+    
+    _cached_networks = None
+    _cached_networks_timestamp = None
+    logger.debug("Network cache cleared")
+
+
+def start_dnsmasq(wifi_interface: str, connection_type: str = "connect") -> bool:
+    """Start dnsmasq for WiFi hotspot"""
+    global _dnsmasq_process
+    
+    try:
+        # Check if dnsmasq is already running
+        if _dnsmasq_process and _dnsmasq_process.poll() is None:
+            logger.info("dnsmasq is already running")
+            return True
+        
+        # Get dnsmasq configuration
+        gateway = config.get("wifi.gateway", "192.168.42.1")
+        dhcp_range = config.get("wifi.dhcp_range", "192.168.42.2,192.168.42.20")
+        log_file = config.get("wifi.log_file", "/var/log/dnsmasq.log")
+        
+        # Build base dnsmasq command
+        dnsmasq_cmd = [
+            "dnsmasq",
+            f"--address=/#/{gateway}",
+            f"--interface={wifi_interface}",
+            "--keep-in-foreground",
+            "--bind-interfaces",
+            "--except-interface=lo",
+            "--no-hosts",
+            "--log-queries",
+            "--log-dhcp",
+            f"--log-facility={log_file}"
+        ]
+        
+        # Add connection type specific options
+        if connection_type == "connect":
+            # WiFi Connect mode - normal DHCP and routing
+            dnsmasq_cmd.extend([
+                f"--dhcp-option=option:router,{gateway}",
+                f"--dhcp-option=option:dns-server,{gateway}",
+                f"--dhcp-range={dhcp_range}",
+            ])
+        elif connection_type == "direct":
+            # WiFi Direct mode - isolated mode with special flags
+            dnsmasq_cmd.extend([
+            ])
+        
+        logger.info(f"Starting dnsmasq with command: {' '.join(dnsmasq_cmd)}")
+        
+        # Start dnsmasq process
+        _dnsmasq_process = subprocess.Popen(
+            dnsmasq_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        
+        # Give it a moment to start
+        time.sleep(1)
+        
+        # Check if it started successfully
+        if _dnsmasq_process.poll() is None:
+            logger.info("dnsmasq started successfully")
+            return True
+        else:
+            stdout, stderr = _dnsmasq_process.communicate()
+            logger.error(f"dnsmasq failed to start: {stderr}")
+            _dnsmasq_process = None
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error starting dnsmasq: {e}")
+        _dnsmasq_process = None
+        return False
+
+def stop_dnsmasq() -> bool:
+    """Stop dnsmasq process"""
+    global _dnsmasq_process
+    
+    try:
+        if _dnsmasq_process and _dnsmasq_process.poll() is None:
+            logger.info("Stopping dnsmasq...")
+            _dnsmasq_process.terminate()
+            
+            # Wait for graceful shutdown
+            try:
+                _dnsmasq_process.wait(timeout=5)
+                logger.info("dnsmasq stopped gracefully")
+            except subprocess.TimeoutExpired:
+                logger.warning("dnsmasq did not stop gracefully, forcing kill")
+                _dnsmasq_process.kill()
+                _dnsmasq_process.wait()
+                logger.info("dnsmasq force killed")
+            
+            _dnsmasq_process = None
+            return True
+        else:
+            logger.info("dnsmasq is not running")
+            return True
+            
+    except Exception as e:
+        logger.error(f"Error stopping dnsmasq: {e}")
+        _dnsmasq_process = None
+        return False
 
 def parse_network_security(security_info: str) -> str:
     """Parse security information from nmcli output"""
@@ -304,19 +560,10 @@ async def manage_wifi_connection(connection_type: str, enable: bool) -> dict:
                 logger.info(f"Creating new {mode_name} connection: {connection_name}")
                 
                 create_cmd = [
-                    "nmcli", 
-                    "connection", "add", 
-                    "type", "wifi",
-                    "mode", "ap",
+                    "nmcli", "connection", "add", "type", "wifi",
                     "ifname", wifi_interface,
                     "con-name", connection_name,
-                    "ssid", hotspot_name,
-                    "802-11-wireless.mode", "ap",
-                    "802-11-wireless.band", "bg",
-                    "802-11-wireless.channel", "6",
-                    "ipv4.method", "shared",
-                    "ipv4.addresses", "192.168.42.1/24",
-                    "ipv6.method", "ignore",
+                    "ssid", hotspot_name
                 ]
                 
                 result = run_command(create_cmd)
@@ -324,6 +571,33 @@ async def manage_wifi_connection(connection_type: str, enable: bool) -> dict:
                     return {
                         "success": False,
                         "message": f"Failed to create {mode_name} hotspot: {result.get('error', 'Unknown error')}"
+                    }
+                
+                # Configure the hotspot settings
+                modify_cmd = [
+                    "nmcli", "connection", "modify", connection_name,
+                    "802-11-wireless.mode", "ap",
+                    "802-11-wireless.band", "bg",
+                    "ipv4.addresses", "192.168.42.1/24",
+                    "ipv4.never-default", "yes",
+                    "ipv6.method", "auto",
+                    "connection.autoconnect", "no"
+                ]
+                if connection_type == "connect":
+                    modify_cmd.extend([
+                        "ipv4.method", "manual",
+                    ])
+
+                if connection_type == "direct":
+                    modify_cmd.extend([
+                        "ipv4.method", "auto",
+                    ])
+                
+                modify_result = run_command(modify_cmd)
+                if not modify_result["success"]:
+                    return {
+                        "success": False,
+                        "message": f"Failed to configure {mode_name} hotspot: {modify_result.get('error', 'Unknown error')}"
                     }
             
             # Enable autoconnect and start the hotspot connection
@@ -339,6 +613,17 @@ async def manage_wifi_connection(connection_type: str, enable: bool) -> dict:
                     "message": f"Failed to start {mode_name} hotspot: {start_result.get('error', 'Unknown error')}"
                 }
             
+            # Start dnsmasq for both WiFi Connect and Direct modes
+            logger.info(f"Starting dnsmasq for {mode_name} mode...")
+            dnsmasq_started = start_dnsmasq(wifi_interface, connection_type)
+            if not dnsmasq_started:
+                logger.warning("Failed to start dnsmasq, but continuing with hotspot")
+            
+            # Clear network cache when starting hotspot (but not during startup)
+            # During startup, we want to keep the cached networks for immediate frontend use
+            if not hasattr(startup_wifi_check, '_startup_in_progress'):
+                clear_network_cache()
+            
             logger.info(f"{mode_name} mode enabled successfully")
             return {
                 "success": True,
@@ -348,6 +633,10 @@ async def manage_wifi_connection(connection_type: str, enable: bool) -> dict:
         else:
             # Disable the connection
             logger.info(f"Disabling {mode_name} mode")
+            
+            # Stop dnsmasq for both WiFi Connect and Direct modes
+            logger.info(f"Stopping dnsmasq for {mode_name} mode...")
+            stop_dnsmasq()
             
             # Disable autoconnect
             run_command([
@@ -362,6 +651,10 @@ async def manage_wifi_connection(connection_type: str, enable: bool) -> dict:
                     "success": False,
                     "message": f"Failed to stop {mode_name} hotspot: {down_result.get('error', 'Unknown error')}"
                 }
+            
+            # Clear network cache when stopping hotspot
+            clear_network_cache()
+            list_networks(use_cache=False, force_scan=True)
             
             logger.info(f"{mode_name} mode disabled successfully")
             return {
@@ -487,19 +780,118 @@ async def get_connection_status(connection_type: str) -> dict:
         }
 
 @app.get("/list-networks")
-async def list_networks(use_cache: bool = True):
+async def list_networks(use_cache: bool = True, force_scan: bool = False):
     """List available WiFi networks"""
     try:
-        # Scan for networks if not using cache
-        if not use_cache:
-            scan_result = run_command(["nmcli", "device", "wifi", "rescan"])
-            if not scan_result["success"]:
+        # If use_cache is True and we have valid cached data, return it
+        if use_cache and not force_scan:
+            cached_networks = get_cached_networks()
+            if cached_networks is not None:
+                logger.info(f"Returning {len(cached_networks)} cached networks")
+                return NetworksResponse(networks=cached_networks)
+        
+        # Check if any hotspot is currently active
+        direct_status = await get_connection_status("direct")
+        connect_status = await get_connection_status("connect")
+        hotspot_active = direct_status["active"] or connect_status["active"]
+        
+        # If hotspot is active and we need to scan, we need to temporarily disable it
+        if hotspot_active and (not use_cache or force_scan):
+            logger.info("Hotspot is active, temporarily disabling for network scan")
+            
+            # Determine which hotspot to disable
+            hotspot_type = "direct" if direct_status["active"] else "connect"
+            hotspot_name = "WiFi Direct" if direct_status["active"] else "WiFi Connect"
+            
+            # Temporarily disable the hotspot
+            disable_result = await manage_wifi_connection(hotspot_type, False)
+            if not disable_result["success"]:
+                return ErrorResponse(
+                    error="hotspot_disable_failed",
+                    message=f"Failed to temporarily disable {hotspot_name} for scanning: {disable_result['message']}"
+                )
+            
+            # Wait for the interface to be available
+            time.sleep(config.get("wifi.hotspot_disable_delay", 3))
+            
+            try:
+                # Perform the scan
+                if force_scan or not use_cache:
+                    scan_result = run_command(["nmcli", "device", "wifi", "rescan"])
+                    if not scan_result["success"]:
+                        logger.warning(f"Scan failed: {scan_result.get('error', 'Unknown error')}")
+                    else:
+                        # Wait a bit for scan to complete
+                        time.sleep(config.get("wifi.rescan_delay", 2))
+                
+                # Get available networks
+                result = run_command([
+                    "nmcli", "-t", "-f", "SSID,SECURITY,SIGNAL,FREQ", 
+                    "device", "wifi", "list"
+                ])
+                
+                if not result["success"]:
+                    return ErrorResponse(
+                        error="scan_failed",
+                            message="Failed to get network list"
+                        )
+                
+                networks = []
+                for line in result["output"].split('\n'):
+                    if line and '\n' not in line:
+                        parts = line.split(':')
+                        if len(parts) >= 4:
+                            ssid = parts[0]
+                            security = parse_network_security(parts[1])
+                            signal = parse_signal_strength(parts[2])
+                            freq = parts[3] if len(parts) > 3 else None
+                            
+                            # Skip empty SSIDs and special networks
+                            if ssid and not ssid.startswith('*') and ssid != "--":
+                                networks.append(NetworkInfo(
+                                    ssid=ssid,
+                                    security=security,
+                                    signal_strength=signal,
+                                    frequency=freq
+                                ))
+                
+                # Re-enable the hotspot
+                logger.info(f"Re-enabling {hotspot_name} after scan")
+                enable_result = await manage_wifi_connection(hotspot_type, True)
+                if not enable_result["success"]:
+                    logger.error(f"Failed to re-enable {hotspot_name}: {enable_result['message']}")
+                    # Don't fail the request, just log the error
+                
+                # Cache the networks
+                set_cached_networks(networks)
+                logger.info(f"list_networks (hotspot): Cached {len(networks)} networks")
+                
+                return NetworksResponse(networks=networks)
+                
+            except Exception as scan_error:
+                # Try to re-enable hotspot even if scan failed
+                logger.error(f"Error during scan: {scan_error}")
+                try:
+                    enable_result = await manage_wifi_connection(hotspot_type, True)
+                    if not enable_result["success"]:
+                        logger.error(f"Failed to re-enable {hotspot_name} after scan error: {enable_result['message']}")
+                except Exception as enable_error:
+                    logger.error(f"Error re-enabling hotspot: {enable_error}")
+                
                 return ErrorResponse(
                     error="scan_failed",
-                    message="Failed to scan networks"
+                    message=f"Failed to scan networks: {str(scan_error)}"
                 )
+        
+        else:
+            # No hotspot active, proceed with normal scan
+            if not use_cache or force_scan:
+                scan_result = run_command(["nmcli", "device", "wifi", "rescan"])
+                if not scan_result["success"]:
+                    logger.warning(f"Scan failed: {scan_result.get('error', 'Unknown error')}")
+                else:
             # Wait a bit for scan to complete
-            time.sleep(config.get("wifi.rescan_delay", 2))
+                    time.sleep(config.get("wifi.rescan_delay", 2))
         
         # Get available networks
         result = run_command([
@@ -532,7 +924,12 @@ async def list_networks(use_cache: bool = True):
                             frequency=freq
                         ))
         
+        # Cache the networks
+        set_cached_networks(networks)
+        logger.info(f"list_networks: Cached {len(networks)} networks")
+        
         return NetworksResponse(networks=networks)
+            
     except Exception as e:
         logger.error(f"Error listing networks: {e}")
         return ErrorResponse(
@@ -550,7 +947,10 @@ async def list_connected():
             "connection", "show", "--active"
         ])
         if not result["success"] or not result["output"]:
+            logger.debug("No active connections found")
             return ConnectedResponse(connected=None)
+        
+        logger.debug(f"Active connections: {result['output']}")
 
         wifi_interface = None
         connection_name = None
@@ -563,9 +963,12 @@ async def list_connected():
             if len(parts) >= 3:
                 name, conn_type, device = parts[0], parts[1], parts[2]
                 if conn_type in ("wifi", "802-11-wireless"):
-                    wifi_interface = device
-                    connection_name = name
-                    break
+                    # Additional check: verify this is not a hotspot connection
+                    # by checking if the device is actually connected
+                    if device and device != "--":
+                        wifi_interface = device
+                        connection_name = name
+                        break
 
         if not wifi_interface or not connection_name:
             return ConnectedResponse(connected=None)
@@ -582,6 +985,7 @@ async def list_connected():
         ssid = ""
         interface = ""
         security = "open"
+        is_hotspot = False
 
         for line in detail_result["output"].splitlines():
             line = line.strip()
@@ -593,12 +997,21 @@ async def list_connected():
 
             if key == "802-11-wireless.ssid":
                 ssid = value
+            elif key == "802-11-wireless.mode":
+                # Check if this is a hotspot connection
+                if value.lower() == "ap":
+                    is_hotspot = True
             elif key == "general.devices" and value:
                 interface = value  # prefer DEVICES
             elif key == "general.ip-iface" and value and not interface:
                 interface = value  # fallback if DEVICES empty
             elif key == "802-11-wireless-security.key-mgmt":
                 security = parse_network_security(value)
+
+        # Skip hotspot connections - we only want regular WiFi connections
+        if is_hotspot:
+            logger.debug(f"Skipping hotspot connection: {connection_name}")
+            return ConnectedResponse(connected=None)
 
         if not ssid or not interface:
             return ConnectedResponse(connected=None)
@@ -686,6 +1099,9 @@ async def connect_to_network(request: ConnectRequest):
         
         if not result["success"]:
             return SuccessResponse(success=False, message="Failed to connect to network")
+        
+        # Clear network cache when connecting to a network
+        clear_network_cache()
         
         return SuccessResponse(success=True, message=f"Connected to {ssid}")
     except Exception as e:
@@ -808,12 +1224,45 @@ async def get_wifi_connect():
     except Exception as e:
         logger.error(f"Error getting WiFi Connect status: {e}")
         raise HTTPException(status_code=500, detail="Failed to get WiFi Connect status")
+
+@app.get("/scan-status")
+async def get_scan_status():
+    """Get information about network scanning capabilities and warnings"""
+    try:
+        # Check if any hotspot is currently active
+        direct_status = await get_connection_status("direct")
+        connect_status = await get_connection_status("connect")
+        hotspot_active = direct_status["active"] or connect_status["active"]
+        
+        if hotspot_active:
+            hotspot_type = "direct" if direct_status["active"] else "connect"
+            hotspot_name = "WiFi Direct" if direct_status["active"] else "WiFi Connect"
+            
+            return ScanStatusResponse(
+                hotspot_active=True,
+                hotspot_type=hotspot_type,
+                can_scan=True,  # We can scan by temporarily disabling hotspot
+                warning_message=f"Scanning will temporarily disconnect clients from {hotspot_name} hotspot"
+            )
+        else:
+            return ScanStatusResponse(
+                hotspot_active=False,
+                hotspot_type=None,
+                can_scan=True,
+                warning_message=None
+            )
+            
+    except Exception as e:
+        logger.error(f"Error getting scan status: {e}")
+        return ScanStatusResponse(
+            hotspot_active=False,
+            hotspot_type=None,
+            can_scan=False,
+            warning_message="Unable to determine scan status"
+        )
         
 if __name__ == "__main__":
-    # Initialize WiFi interface at startup
-    initialize_wifi_interface()
-    
-    # Run the server
+    # Run the server (startup event will handle initialization)
     uvicorn.run(
         app, 
         host=config.get_server_config()["host"],  # Allow external connections

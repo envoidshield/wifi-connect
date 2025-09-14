@@ -33,7 +33,13 @@ class Config:
                 "hotspot_name": "Envoid-Connect",
                 "scan_timeout": 30,
                 "rescan_delay": 2,
-                "connection_name": "connectInterface"
+                "hotspot_disable_delay": 3,
+                "connection_name": "connectInterface",
+                "startup_check": True,
+                "gateway": "192.168.42.1",
+                "dhcp_range": "192.168.42.2,192.168.42.20",
+                "log_file": "/var/log/dnsmasq.log",
+                "cache_duration": 300
             },
               "direct": {
                 "hotspot_name": "Envoid-Direct",
@@ -74,6 +80,12 @@ class Config:
             "WIFI_HOTSPOT_PASSWORD": ("wifi", "hotspot_password"),
             "WIFI_SCAN_TIMEOUT": ("wifi", "scan_timeout"),
             "WIFI_RESCAN_DELAY": ("wifi", "rescan_delay"),
+            "WIFI_HOTSPOT_DISABLE_DELAY": ("wifi", "hotspot_disable_delay"),
+            "WIFI_STARTUP_CHECK": ("wifi", "startup_check"),
+            "WIFI_GATEWAY": ("wifi", "gateway"),
+            "WIFI_DHCP_RANGE": ("wifi", "dhcp_range"),
+            "WIFI_LOG_FILE": ("wifi", "log_file"),
+            "WIFI_CACHE_DURATION": ("wifi", "cache_duration"),
             "WIFI_CORS_ENABLED": ("cors", "enabled"),
             "WIFI_CORS_ORIGINS": ("cors", "origins")
         }
@@ -88,12 +100,12 @@ class Config:
                 
                 # Convert value based on expected type
                 key = config_path[-1]
-                if key in ["port", "scan_timeout", "rescan_delay"]:
+                if key in ["port", "scan_timeout", "rescan_delay", "hotspot_disable_delay", "cache_duration"]:
                     try:
                         current[key] = int(value)
                     except ValueError:
                         print(f"Warning: Invalid integer value for {env_var}: {value}")
-                elif key == "enabled":
+                elif key in ["enabled", "startup_check"]:
                     current[key] = value.lower() in ["true", "1", "yes", "on"]
                 elif key == "origins":
                     current[key] = [origin.strip() for origin in value.split(",")]

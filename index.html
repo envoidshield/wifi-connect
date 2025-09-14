@@ -478,7 +478,7 @@
             <div id="available" class="tab-content active">
                 <div class="controls">
                     <button class="btn" onclick="refreshNetworks()">
-                        <span>🔄</span> Scan Networks
+                        <span>🔄</span> Scan Networks (Fresh)
                     </button>
                 </div>
                 <ul class="network-list" id="available-networks">
@@ -584,6 +584,9 @@
             fetchWiFiDirectStatus();
             showTab('available');
             
+            // Load cached networks immediately
+            loadCachedNetworks();
+            
             // Check server status periodically
             setInterval(checkServerStatus, 5000);
         });
@@ -661,7 +664,7 @@
             // Load content based on tab
             switch(tabName) {
                 case 'available':
-                    refreshNetworks();
+                    loadCachedNetworks();
                     break;
                 case 'connected':
                     refreshConnected();
@@ -758,7 +761,24 @@
             }
         }
 
-        // Network scanning
+        // Load cached networks (for initial page load)
+        async function loadCachedNetworks() {
+            const container = document.getElementById('available-networks');
+            
+            try {
+                const response = await apiCall('/list-networks?use_cache=true');
+                if (!response.ok) throw new Error('Failed to load cached networks');
+                
+                const data = await response.json();
+                renderAvailableNetworks(data.networks || []);
+            } catch (error) {
+                console.error('Error loading cached networks:', error);
+                // If cached networks fail, show loading spinner
+                container.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading networks...</p></div>';
+            }
+        }
+
+        // Network scanning (force refresh)
         async function refreshNetworks() {
             const container = document.getElementById('available-networks');
             container.innerHTML = '<div class="loading"><div class="spinner"></div><p>Scanning networks...</p></div>';

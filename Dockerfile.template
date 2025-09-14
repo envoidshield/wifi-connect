@@ -24,10 +24,10 @@ COPY wifi-connect/config_util.py .
 COPY wifi-connect/test_api.py .
 COPY wifi-connect/sleep.sh .
 COPY wifi-connect/ui ui/
-COPY wifi-connect/index.html index.html
+COPY wifi-connect/newindex.html index.html
 COPY wifi-connect/scripts/block-peers.sh .
 COPY wifi-connect/wifi_config.json .
 RUN chmod +x start.sh block-peers.sh
 
 # Run the API server
-CMD ["/bin/bash", "sleep.sh"]
+CMD ["python3", "wifi_api_server.py"]
