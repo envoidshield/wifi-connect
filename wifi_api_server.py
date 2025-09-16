@@ -97,6 +97,7 @@ class ConnectedNetwork(BaseModel):
     ssid: str
     interface: str
     security: str
+    connection_name: str
 
 class SavedNetwork(BaseModel):
     ssid: str
@@ -384,11 +385,7 @@ def is_cache_valid() -> bool:
     if _cached_networks is None or _cached_networks_timestamp is None:
         return False
     
-    # Get cache duration from config (default 5 minutes)
-    cache_duration = config.get("wifi.cache_duration", 300)  # 5 minutes
-    current_time = time.time()
-    
-    return (current_time - _cached_networks_timestamp) < cache_duration
+    return True
 
 def get_cached_networks() -> Optional[List[NetworkInfo]]:
     """Get cached networks if they are still valid"""
@@ -1150,7 +1147,8 @@ async def get_wifi_connections(active_only: bool = False):
                 detailed_connections.append(ConnectedNetwork(
                     ssid=ssid,
                     interface=interface,
-                    security=parse_network_security(security)
+                    security=parse_network_security(security),
+                    connection_name=connection_name
                 ))
         
         return detailed_connections
@@ -1393,32 +1391,27 @@ async def forget_network_endpoint_alt(request: dict):
 async def forget_all_networks(request: ForgetAllRequest):
     """Remove all saved networks"""
     try:
-        # Get all saved networks
-        result = run_command([
-            "nmcli", "-t", "-f", "NAME,TYPE", 
-            "connection", "show"
-        ])
+        # Get all saved networks using the existing list_saved endpoint
+        saved_response = await list_saved()
         
-        if not result["success"]:
+        if not hasattr(saved_response, 'saved_networks'):
             return SuccessResponse(success=False, message="Failed to get saved networks")
+        
+        saved_networks = saved_response.saved_networks
+        
+        if not saved_networks:
+            return SuccessResponse(success=True, message="No saved networks to forget")
         
         deleted_count = 0
         failed_networks = []
         
-        for line in result["output"].split('\n'):
-            if line.strip():  # Only process non-empty lines
-                parts = line.split(':')
-                if len(parts) >= 2:
-                    name = parts[0]
-                    conn_type = parts[1]
-                    
-                    # Only process WiFi connections
-                    if conn_type == "802-11-wireless":
-                        forget_result = await forget_network(name)
-                        if forget_result["success"]:
-                            deleted_count += 1
-                        else:
-                            failed_networks.append(name)
+        # Forgot each network by SSID
+        for network in saved_networks:
+            forget_result = await forget_network(network.ssid)
+            if forget_result["success"]:
+                deleted_count += 1
+            else:
+                failed_networks.append(network.ssid)
         
         # Prepare response message
         if failed_networks:
@@ -1430,7 +1423,7 @@ async def forget_all_networks(request: ForgetAllRequest):
             success=len(failed_networks) == 0,  # Success only if no failures
             message=message
         )
-        
+        await manage_wifi_connection("connect", True)
     except Exception as e:
         logger.error(f"Error forgetting all networks: {e}")
         return SuccessResponse(success=False, message="Failed to forget all networks")
