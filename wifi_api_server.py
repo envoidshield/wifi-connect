@@ -1203,75 +1203,94 @@ async def connect_to_network(request: ConnectRequest):
         return SuccessResponse(success=False, message="Connection failed")
 
 async def forget_network(ssid: str) -> dict:
-    """Remove a specific saved network by SSID"""
+    """Remove all networks with the specified SSID"""
     try:
-        # Get all WiFi connections to find the one with matching SSID
-        connections = await get_wifi_connections(active_only=False)
-        
-        # Find the connection with matching SSID
-        connection_to_delete = None
-        for connection in connections:
-            if connection.ssid == ssid:
-                # We need to find the connection name, not just the SSID
-                # Get all connections and find the one with this SSID
-                result = run_command([
-                    "nmcli", "-t", "-f", "NAME,TYPE", "connection", "show"
-                ])
-                
-                if result["success"]:
-                    for line in result["output"].splitlines():
-                        line = line.strip()
-                        if line and ':' in line:
-                            parts = line.split(':')
-                            if len(parts) >= 2:
-                                name, conn_type = parts[0], parts[1]
-                                if conn_type == "802-11-wireless":
-                                    # Check if this connection has the matching SSID
-                                    detail_result = run_command([
-                                        "nmcli", "-t", "-f", "802-11-wireless.ssid,802-11-wireless.mode",
-                                        "connection", "show", name
-                                    ])
-                                    
-                                    if detail_result["success"]:
-                                        connection_ssid = ""
-                                        mode = ""
-                                        for detail_line in detail_result["output"].splitlines():
-                                            if ':' in detail_line:
-                                                key, value = detail_line.split(':', 1)
-                                                if key == "802-11-wireless.ssid":
-                                                    connection_ssid = value.strip()
-                                                elif key == "802-11-wireless.mode":
-                                                    mode = value.strip().lower()
-                                        
-                                        # Skip AP mode connections and match SSID
-                                        if mode != "ap" and connection_ssid == ssid:
-                                            connection_to_delete = name
-                                            break
-                break
-        
-        if not connection_to_delete:
-            return {
-                "success": False, 
-                "message": f"Network with SSID '{ssid}' not found"
-            }
-        
-        # Delete the network connection
-        delete_result = run_command([
-            "nmcli", "connection", "delete", connection_to_delete
+        # Get all connections and find all with matching SSID
+        result = run_command([
+            "nmcli", "-t", "-f", "NAME,TYPE", "connection", "show"
         ])
         
-        if delete_result["success"]:
-            logger.info(f"Successfully forgot network: {ssid} (connection: {connection_to_delete})")
-            return {
-                "success": True, 
-                "message": f"Successfully forgot network '{ssid}'"
-            }
-        else:
-            logger.error(f"Failed to delete network {ssid}: {delete_result['error']}")
+        if not result["success"]:
             return {
                 "success": False, 
-                "message": f"Failed to forget network '{ssid}': {delete_result['error']}"
+                "message": "Failed to get connection list"
             }
+        
+        connections_to_delete = []
+        
+        # Find all connections with matching SSID
+        for line in result["output"].splitlines():
+            line = line.strip()
+            if line and ':' in line:
+                parts = line.split(':')
+                if len(parts) >= 2:
+                    name, conn_type = parts[0], parts[1]
+                    if conn_type == "802-11-wireless":
+                        # Check if this connection has the matching SSID
+                        detail_result = run_command([
+                            "nmcli", "-t", "-f", "802-11-wireless.ssid,802-11-wireless.mode",
+                            "connection", "show", name
+                        ])
+                        
+                        if detail_result["success"]:
+                            connection_ssid = ""
+                            mode = ""
+                            for detail_line in detail_result["output"].splitlines():
+                                if ':' in detail_line:
+                                    key, value = detail_line.split(':', 1)
+                                    if key == "802-11-wireless.ssid":
+                                        connection_ssid = value.strip()
+                                    elif key == "802-11-wireless.mode":
+                                        mode = value.strip().lower()
+                            
+                            # Skip AP mode connections and match SSID
+                            if mode != "ap" and connection_ssid == ssid:
+                                connections_to_delete.append(name)
+        
+        if not connections_to_delete:
+            return {
+                "success": False, 
+                "message": f"No networks with SSID '{ssid}' found"
+            }
+        
+        # Delete all connections with matching SSID
+        deleted_count = 0
+        failed_connections = []
+        
+        for connection_name in connections_to_delete:
+            delete_result = run_command([
+                "nmcli", "connection", "delete", connection_name
+            ])
+            
+            if delete_result["success"]:
+                deleted_count += 1
+                logger.info(f"Successfully deleted connection: {connection_name}")
+            else:
+                failed_connections.append(connection_name)
+                logger.error(f"Failed to delete connection {connection_name}: {delete_result['error']}")
+        
+        # Check if there are any networks left
+        remaining_connections = await get_wifi_connections(active_only=False)
+        
+        if not remaining_connections:
+            # No networks left, start WiFi Connect mode
+            logger.info("No saved networks remaining, starting WiFi Connect mode")
+            connect_result = await manage_wifi_connection("connect", True)
+            if connect_result["success"]:
+                logger.info("WiFi Connect mode started successfully")
+            else:
+                logger.warning(f"Failed to start WiFi Connect mode: {connect_result['message']}")
+        
+        # Prepare response message
+        if failed_connections:
+            message = f"Deleted {deleted_count} network(s) with SSID '{ssid}'. Failed to delete: {', '.join(failed_connections)}"
+        else:
+            message = f"Successfully deleted {deleted_count} network(s) with SSID '{ssid}'"
+        
+        return {
+            "success": len(failed_connections) == 0,
+            "message": message
+        }
             
     except Exception as e:
         logger.error(f"Error forgetting network {ssid}: {e}")
