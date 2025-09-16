@@ -407,7 +407,7 @@ def set_cached_networks(networks: List[NetworkInfo]) -> None:
 def clear_network_cache() -> None:
     """Clear the network cache"""
     global _cached_networks, _cached_networks_timestamp
-    
+    return
     _cached_networks = None
     _cached_networks_timestamp = None
     logger.debug("Network cache cleared")
@@ -710,7 +710,7 @@ async def manage_wifi_connection(connection_type: str, enable: bool) -> dict:
                     "success": False,
                     "message": f"Failed to start {mode_name} hotspot: {start_result.get('error', 'Unknown error')}"
                 }
-            logger.info(f"Stoping dnsmasq for {mode_name} mode...")
+            logger.info(f"Stopping dnsmasq for {mode_name} mode...")
             stop_dnsmasq()
             time.sleep(1)
             logger.info(f"Starting dnsmasq for {mode_name} mode...")
@@ -884,10 +884,13 @@ async def list_networks(use_cache: bool = True, force_scan: bool = False):
     try:
         # If use_cache is True and we have valid cached data, return it
         if use_cache and not force_scan:
+            logger.debug(f"Cache requested: use_cache={use_cache}, force_scan={force_scan}")
             cached_networks = get_cached_networks()
             if cached_networks is not None:
                 logger.info(f"Returning {len(cached_networks)} cached networks")
                 return NetworksResponse(networks=cached_networks)
+            else:
+                logger.debug("No valid cached networks found, proceeding with scan")
         
         # Check if any hotspot is currently active
         direct_status = await get_connection_status("direct")

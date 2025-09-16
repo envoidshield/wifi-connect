@@ -1006,7 +1006,7 @@
             try {
                 const response = await fetch('health', { 
                     method: 'GET',
-                    signal: AbortSignal.timeout(3000) // 3 second timeout
+                    signal: AbortSignal.timeout(30000) // 3 second timeout
                 });
                 if (response.ok) {
                     if (!serverOnline) {
@@ -1033,12 +1033,6 @@
             pendingRequests.add(requestId);
             
             try {
-                // Check server connectivity first
-                const isOnline = await checkServerConnectivity();
-                if (!isOnline) {
-                    throw new Error('Server is busy or restarting');
-                }
-                
                 const response = await fetch(url, {
                     ...options,
                     signal: AbortSignal.timeout(10000) // 10 second timeout
@@ -1136,10 +1130,7 @@
 
         // Initialize app
         document.addEventListener('DOMContentLoaded', function() {
-            fetchWiFiDirectStatus();
-            init();
-            
-            // Start periodic server status check
+            fetchWiFiDirectStatus();            
             setInterval(checkServerConnectivity, 5000); // Check every 5 seconds
         });
 
@@ -1629,7 +1620,7 @@
                     <div class="wifi-direct-info">
                         <div class="info-item">
                             <i class="fas fa-info-circle"></i>
-                            <span>Other devices can connect directly to this device</span>
+                            <span>Other devices connect directly to this device</span>
                         </div>
                     </div>
                 </div>
