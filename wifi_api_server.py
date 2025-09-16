@@ -893,14 +893,20 @@ async def list_networks(use_cache: bool = True, force_scan: bool = False):
         direct_status = await get_connection_status("direct")
         connect_status = await get_connection_status("connect")
         hotspot_active = direct_status["active"] or connect_status["active"]
-        hotspot_name = config.get_direct_config()["hotspot_name"] if direct_status["active"] else config.get_connect_config()["hotspot_name"]
-        # If hotspot is active and we need to scan, we need to temporarily disable it
+        
+        # Determine which hotspot is active and get its details
         hotspot_type = ""
+        hotspot_name = ""
+        if direct_status["active"]:
+            hotspot_type = "direct"
+            hotspot_name = config.get_direct_config()["hotspot_name"]
+        elif connect_status["active"]:
+            hotspot_type = "connect"
+            hotspot_name = config.get_connect_config()["hotspot_name"]
+        
+        # If hotspot is active and we need to scan, we need to temporarily disable it
         if hotspot_active and (not use_cache or force_scan):
             logger.info("Hotspot is active, temporarily disabling for network scan")
-            
-            # Determine which hotspot to disable
-            hotspot_type = "direct" if direct_status["active"] else "connect"
             
             # Temporarily disable the hotspot
             disable_result = await manage_wifi_connection(hotspot_type, False)
@@ -987,12 +993,13 @@ async def list_networks(use_cache: bool = True, force_scan: bool = False):
         except Exception as scan_error:
             # Try to re-enable hotspot even if scan failed
             logger.error(f"Error during scan: {scan_error}")
-            try:
-                enable_result = await manage_wifi_connection(hotspot_type, True)
-                if not enable_result["success"]:
-                    logger.error(f"Failed to re-enable {hotspot_name} after scan error: {enable_result['message']}")
-            except Exception as enable_error:
-                logger.error(f"Error re-enabling hotspot: {enable_error}")
+            if hotspot_active and hotspot_type:
+                try:
+                    enable_result = await manage_wifi_connection(hotspot_type, True)
+                    if not enable_result["success"]:
+                        logger.error(f"Failed to re-enable {hotspot_name} after scan error: {enable_result['message']}")
+                except Exception as enable_error:
+                    logger.error(f"Error re-enabling hotspot: {enable_error}")
             
             return ErrorResponse(
                 error="scan_failed",
@@ -1419,11 +1426,13 @@ async def forget_all_networks(request: ForgetAllRequest):
         else:
             message = f"Successfully forgot {deleted_count} networks"
         
+        # Start WiFi Connect mode after forgetting all networks
+        await manage_wifi_connection("connect", True)
+        
         return SuccessResponse(
             success=len(failed_networks) == 0,  # Success only if no failures
             message=message
         )
-        await manage_wifi_connection("connect", True)
     except Exception as e:
         logger.error(f"Error forgetting all networks: {e}")
         return SuccessResponse(success=False, message="Failed to forget all networks")
