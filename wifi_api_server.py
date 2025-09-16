@@ -598,7 +598,26 @@ def parse_signal_strength(signal_str: str) -> int:
 @app.get("/")
 async def serve_index():
     """Serve the main index.html file"""
-    return FileResponse("index.html")
+    try:
+        # Read the index.html file
+        with open("index.html", "r", encoding="utf-8") as f:
+            content = f.read()
+        
+        # Check for touchscreen support
+        touchscreen = os.getenv('ENABLE_SURFACE_SUPPORT')
+        if touchscreen == '1':
+            logger.debug("Touchscreen mode enabled, adding keyboard scripts")
+            content = content.replace('<!-- kioskboard -->', '<script src="./ui/public/static/js/kioskboard-aio.min.js"></script>')
+            content = content.replace('<!-- keyboard -->', '<script src="./ui/public/static/js/keyboard.js"></script>')
+        
+        # Return the modified content
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(content=content)
+        
+    except Exception as e:
+        logger.error(f"Error serving index.html: {e}")
+        # Fallback to original FileResponse if there's an error
+        return FileResponse("index.html")
 
 @app.get("/health")
 async def health_check():
