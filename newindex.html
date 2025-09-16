@@ -1170,6 +1170,7 @@
             // Load content based on tab
             switch(tabName) {
                 case 'available':
+                    useCache = true;
                     refreshNetworks();
                     break;
                 case 'connected':
