@@ -212,6 +212,66 @@ def _detect_wifi_interface() -> Optional[str]:
         logger.error(f"Error detecting WiFi interface: {e}")
         return None
 
+async def cleanup_startup_connections():
+    """Clean up existing connect and direct connections at startup"""
+    try:
+        logger.info("Starting cleanup of existing connect and direct connections...")
+        
+        # Get connection names from config
+        connect_config = config.get_connect_config()
+        direct_config = config.get_direct_config()
+        
+        connect_connection_name = connect_config.get("connection_name", "connectInterface")
+        direct_connection_name = direct_config.get("connection_name", "directInterface")
+        
+        logger.info(f"Looking for connections: '{connect_connection_name}' and '{direct_connection_name}'")
+        
+        connections_to_cleanup = [connect_connection_name, direct_connection_name]
+        cleaned_count = 0
+        
+        for connection_name in connections_to_cleanup:
+            logger.debug(f"Checking connection: '{connection_name}'")
+            
+            # Check if connection exists
+            check_result = run_command(["nmcli", "connection", "show", connection_name])
+            
+            if check_result["success"]:
+                logger.info(f"Found existing connection '{connection_name}', removing it...")
+                
+                # Stop the connection if it's active
+                logger.debug(f"Stopping connection '{connection_name}' if active...")
+                down_result = run_command(["nmcli", "connection", "down", connection_name])
+                if down_result["success"]:
+                    logger.debug(f"Successfully stopped connection '{connection_name}'")
+                else:
+                    logger.debug(f"Connection '{connection_name}' was not active or already stopped")
+                
+                # Delete the connection
+                logger.debug(f"Deleting connection '{connection_name}'...")
+                delete_result = run_command(["nmcli", "connection", "delete", connection_name])
+                
+                if delete_result["success"]:
+                    logger.info(f"Successfully removed connection '{connection_name}'")
+                    cleaned_count += 1
+                else:
+                    logger.warning(f"Failed to remove connection '{connection_name}': {delete_result.get('error', 'Unknown error')}")
+            else:
+                logger.debug(f"Connection '{connection_name}' does not exist, skipping")
+        
+        # Also stop any running dnsmasq process
+        logger.info("Stopping any running dnsmasq process...")
+        dnsmasq_stopped = stop_dnsmasq()
+        if dnsmasq_stopped:
+            logger.info("dnsmasq process cleanup completed")
+        else:
+            logger.debug("No dnsmasq process was running")
+        
+        logger.info(f"Startup connection cleanup completed - removed {cleaned_count} connections")
+        
+    except Exception as e:
+        logger.error(f"Error during startup connection cleanup: {e}")
+        logger.error(f"Cleanup error details: {str(e)}", exc_info=True)
+
 def initialize_wifi_interface():
     """Initialize the cached WiFi interface at startup"""
     global _cached_wifi_interface
@@ -227,6 +287,7 @@ async def startup_wifi_check():
     try:
         # Set startup flag to prevent cache clearing during startup
         startup_wifi_check._startup_in_progress = True
+        await cleanup_startup_connections()
         
         # Check if startup check is enabled
         if not config.get("wifi.startup_check", True):

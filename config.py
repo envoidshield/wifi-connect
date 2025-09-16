@@ -87,7 +87,9 @@ class Config:
             "WIFI_LOG_FILE": ("wifi", "log_file"),
             "WIFI_CACHE_DURATION": ("wifi", "cache_duration"),
             "WIFI_CORS_ENABLED": ("cors", "enabled"),
-            "WIFI_CORS_ORIGINS": ("cors", "origins")
+            "WIFI_CORS_ORIGINS": ("cors", "origins"),
+            "WIFI_HOTSPOT_NAME": ("wifi", "hotspot_name"),
+            "DIRECT_HOTSPOT_NAME": ("direct", "hotspot_name"),
         }
         
         for env_var, config_path in env_mappings.items():
@@ -111,6 +113,19 @@ class Config:
                     current[key] = [origin.strip() for origin in value.split(",")]
                 else:
                     current[key] = value
+        
+        # Handle RESIN_DEVICE_UUID for unique hotspot names
+        resin_uuid = os.getenv("RESIN_DEVICE_UUID")
+        if resin_uuid:
+            # Use first 5 characters of RESIN_DEVICE_UUID for unique identification
+            device_id = resin_uuid[:5]
+            
+            # Set default hotspot names with device ID if not already set via env vars
+            if not os.getenv("WIFI_HOTSPOT_NAME"):
+                config["wifi"]["hotspot_name"] = f"Envoid-Connect-{device_id}"
+            
+            if not os.getenv("DIRECT_HOTSPOT_NAME"):
+                config["direct"]["hotspot_name"] = f"Envoid-Direct-{device_id}"
     
     def get(self, key: str, default: Any = None) -> Any:
         """Get configuration value using dot notation"""
