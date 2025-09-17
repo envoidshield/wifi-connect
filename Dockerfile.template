@@ -23,7 +23,10 @@ COPY wifi-connect/config.py .
 COPY wifi-connect/config_util.py .
 COPY wifi-connect/test_api.py .
 COPY wifi-connect/sleep.sh .
-COPY wifi-connect/ui ui/
+COPY wifi-connect/ui/public/static/js/keyboard.js ui/public/static/js/keyboard.json
+COPY wifi-connect/ui/public/static/js/kioskboard-aio.min.js ui/public/static/js/kioskboard-aio.min.json
+COPY wifi-connect/ui/public/static/logo.png ui/public/static/logo.png
+
 COPY wifi-connect/newindex.html index.html
 COPY wifi-connect/scripts/block-peers.sh .
 COPY wifi-connect/wifi_config.json .
