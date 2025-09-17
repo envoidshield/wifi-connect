@@ -1006,7 +1006,7 @@
             try {
                 const response = await fetch('health', { 
                     method: 'GET',
-                    signal: AbortSignal.timeout(30000) // 3 second timeout
+                    signal: AbortSignal.timeout(30000) // 30 second timeout
                 });
                 if (response.ok) {
                     if (!serverOnline) {
@@ -1035,7 +1035,7 @@
             try {
                 const response = await fetch(url, {
                     ...options,
-                    signal: AbortSignal.timeout(10000) // 10 second timeout
+                    signal: AbortSignal.timeout(30000) // 30 second timeout
                 });
                 
                 if (!response.ok) {
@@ -1130,11 +1130,12 @@
 
         // Initialize app
         document.addEventListener('DOMContentLoaded', function() {
-            fetchWiFiDirectStatus();            
-            setInterval(checkServerConnectivity, 5000); // Check every 5 seconds
+            fetchWiFiDirectStatus();
+            showTab(currentTab);           
+            //setInterval(checkServerConnectivity, 5000); // Check every 5 seconds
         });
 
-        function showTab(tabName) {
+        async function showTab(tabName) {
             // Don't change tabs if WiFi Direct is active
             if (wifiDirect) {
                 return;
@@ -1184,13 +1185,13 @@
                             document.getElementById("main-section").style.display = "none";
                         }
                         else{
-                            showTab('available');
+                            showTab(currentTab);
                         }
                     } catch (error) {
                         console.error('Error fetching WiFi Direct status:', error);
                         showToast('Error loading WiFi Direct status', 'error');
                         // Default to showing available tab if there's an error
-                        showTab('available');
+                        showTab(currentTab);
                     }
                 }
 
@@ -1517,7 +1518,7 @@
                 }
                 
                 showToast(`WiFi Direct ${wifiDirect ? 'enabled' : 'disabled'}`, 'success');
-                
+/*                
                 // Show restart notification
                 showToast('Server restarting to apply changes...', 'success', true);
                 
@@ -1538,7 +1539,7 @@
                     };
                     checkServer();
                 }, 2000);
-                
+*/               
             } catch (error) {
                 handleError(error, 'toggleWiFiDirect', 'Error toggling WiFi Direct');
             }
