@@ -1509,7 +1509,7 @@
                 });
                 
                 const data = await response.json();
-                wifiDirect = data.value === 'true';
+                wifiDirect = data.value == true;
                 updateWiFiDirectUI(wifiDirect);
                 
                 // Add haptic feedback for mobile devices
