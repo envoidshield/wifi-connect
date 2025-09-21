@@ -33,5 +33,5 @@ COPY wifi-connect/wifi_config.json .
 RUN chmod +x start.sh block-peers.sh sleep.sh
 
 # Run the API server
-#CMD ["./sleep.sh"]
-CMD ["python3", "wifi_api_server.py"]
+CMD ["./sleep.sh"]
+# CMD ["python3", "wifi_api_server.py"]

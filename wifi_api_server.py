@@ -619,7 +619,6 @@ def remove_dnsmasq_config() -> bool:
         logger.error(f"Error removing dnsmasq configuration: {e}")
         return False
 
-
 def start_dnsmasq(wifi_interface: str, connection_type: str = "connect") -> bool:
     """Start dnsmasq for WiFi hotspot"""
     global _dnsmasq_process
@@ -752,8 +751,19 @@ def parse_signal_strength(signal_str: str) -> int:
         # If the value is already in a reasonable percentage range (0-100), use it directly
         if 0 <= signal_value <= 100:
             return signal_value
+        # If it's a negative value (dBm format), convert to percentage
+        elif signal_value < 0:
+            # Convert dBm to percentage (rough approximation)
+            # -100 dBm = 0%, -50 dBm = 100%
+            if signal_value <= -100:
+                return 0
+            elif signal_value >= -50:
+                return 100
+            else:
+                return int(((signal_value + 100) / 50) * 100)
         else:
-            return 1
+            # For positive values > 100, cap at 100
+            return 100
             
     except (ValueError, AttributeError):
         return 0
@@ -1153,19 +1163,42 @@ async def list_networks(use_cache: bool = True, force_scan: bool = False):
                 
                 for line in output_lines:
                     if line and '\n' not in line:
-                        parts = line.split(':')
+                        logger.debug(f"Parsing line: '{line}'")
+                        
+                        # Handle escaped colons in BSSID by splitting more carefully
+                        # The format is: ACTIVE:SSID:BSSID:SECURITY:CHAN:SIGNAL
+                        # But BSSID contains escaped colons like "00\:B8\:C2\:01\:7B\:8C"
+                        
+                        # First split by unescaped colons only
+                        parts = []
+                        current_part = ""
+                        i = 0
+                        while i < len(line):
+                            if line[i] == ':' and (i == 0 or line[i-1] != '\\'):
+                                parts.append(current_part)
+                                current_part = ""
+                            else:
+                                current_part += line[i]
+                            i += 1
+                        parts.append(current_part)  # Add the last part
+                        
+                        logger.debug(f"Split into {len(parts)} parts: {parts}")
+                        
                         if len(parts) >= 6:
                             active = parts[0].strip() == "*"
                             ssid = parts[1]
-                            bssid = parts[2]
+                            bssid = parts[2].replace('\\:', ':')  # Convert escaped colons back to normal colons
                             security = parse_network_security(parts[3])
                             frequency_band = parse_frequency_band(parts[4]) if len(parts) > 4 else "unknown"
                             signal = parse_signal_strength(parts[5]) if len(parts) > 5 else 0
+                            
+                            logger.debug(f"Parsed: active={active}, ssid='{ssid}', bssid='{bssid}', security='{security}', freq='{frequency_band}', signal={signal}")
                             
                             # Skip empty SSIDs and special networks
                             if ssid and not ssid.startswith('*') and ssid != "--":
                                 # Skip if we've already seen this BSSID
                                 if bssid in seen_bssids:
+                                    logger.debug(f"Skipping duplicate BSSID: {bssid}")
                                     continue
                                 
                                 seen_bssids.add(bssid)
@@ -1555,8 +1588,6 @@ async def forget_network(ssid: str = None, bssid: str = None) -> dict:
             "message": f"Error forgetting network '{identifier}': {str(e)}"
         }
 
-
-
 @app.post("/forget")
 async def forget_network_endpoint(request: ForgetNetworkRequest):
     """Remove a specific saved network"""
@@ -1590,7 +1621,6 @@ async def forget_network_endpoint_alt(request: dict):
         success=result["success"],
         message=result["message"]
     )
-
 
 @app.post("/forget-all")
 async def forget_all_networks(request: ForgetAllRequest):
