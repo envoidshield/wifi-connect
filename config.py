@@ -39,7 +39,8 @@ class Config:
                 "gateway": "192.168.42.1",
                 "dhcp_range": "192.168.42.2,192.168.42.20",
                 "log_file": "/var/log/dnsmasq.log",
-                "cache_duration": 300
+                "cache_duration": 300,
+                "state_file": "data/wifi_state.json"
             },
               "direct": {
                 "hotspot_name": "Envoid-Direct",

@@ -808,10 +808,12 @@
             container.innerHTML = networks.map(network => `
                 <li class="network-item" onclick="showConnectModal('${escapeHtml(network.ssid)}', '${escapeHtml(network.security)}')">
                     <div class="network-info">
-                        <h3>📶 ${escapeHtml(network.ssid)}</h3>
+                        <h3>📶 ${escapeHtml(network.ssid)} ${network.active ? '<span style="color: #10b981;">✓ Active</span>' : ''}</h3>
                         <div class="network-details">
                             Security: ${escapeHtml(network.security)}
                             ${network.signal_strength ? ` • Signal: ${network.signal_strength}%` : ''}
+                            ${network.frequency_band ? ` • ${escapeHtml(network.frequency_band)}` : ''}
+                            ${network.bssid ? ` • BSSID: ${escapeHtml(network.bssid)}` : ''}
                             <span class="security-badge ${network.security === 'open' ? 'open' : 'secure'}">
                                 ${network.security === 'open' ? '🔓 Open' : '🔒 Secured'}
                             </span>
@@ -898,7 +900,7 @@
                         <button class="btn btn-success" onclick="event.stopPropagation(); connectToSaved('${escapeHtml(network.ssid)}')">
                             Connect
                         </button>
-                        <button class="btn btn-danger" onclick="event.stopPropagation(); forgetNetwork('${escapeHtml(network.ssid)}')">
+                        <button class="btn btn-danger" onclick="event.stopPropagation(); forgetNetworkByBssid('${escapeHtml(network.bssid || '')}', '${escapeHtml(network.ssid)}')">
                             Forget
                         </button>
                     </div>
@@ -985,7 +987,47 @@
             }
         }
 
-        // Forget network
+        // Forget network by BSSID (with SSID fallback)
+        async function forgetNetworkByBssid(bssid, ssid) {
+            if (!bssid && !ssid) {
+                showToast('No network identifier available', 'error');
+                return;
+            }
+            
+            const identifier = bssid || ssid;
+            const identifierType = bssid ? 'BSSID' : 'SSID';
+            const confirmMessage = bssid ? 
+                `Are you sure you want to forget network with BSSID "${bssid}"?` :
+                `Are you sure you want to forget network "${ssid}"?`;
+            
+            if (!confirm(confirmMessage)) return;
+            
+            try {
+                const requestBody = bssid ? { bssid: bssid } : { ssid: ssid };
+                
+                const response = await apiCall('/forget', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                if (!response.ok) throw new Error('Failed to forget network');
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast(`Forgot network with ${identifierType} "${identifier}"`, 'success');
+                    refreshSaved();
+                } else {
+                    showToast(`Failed to forget network with ${identifierType} "${identifier}"`, 'error');
+                }
+            } catch (error) {
+                console.error(`Error forgetting network by ${identifierType}:`, error);
+                showToast(`Error forgetting network with ${identifierType} "${identifier}"`, 'error');
+            }
+        }
+
+        // Legacy forget network function (kept for compatibility)
         async function forgetNetwork(ssid) {
             if (!confirm(`Are you sure you want to forget "${ssid}"?`)) return;
             
@@ -993,7 +1035,7 @@
                 const response = await apiCall('/forget', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ network_name: ssid })
+                    body: JSON.stringify({ ssid: ssid })
                 });
                 
                 if (!response.ok) throw new Error('Failed to forget network');

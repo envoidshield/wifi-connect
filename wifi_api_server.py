@@ -71,6 +71,26 @@ async def shutdown_event():
     # Stop dnsmasq if running
     stop_dnsmasq()
     
+    # Save current state before shutdown
+    try:
+        # Check current connection status
+        connected_response = await list_connected()
+        if hasattr(connected_response, 'connected') and connected_response.connected:
+            save_wifi_state("connected", connected_response.connected)
+        else:
+            # Check if any hotspot is active
+            direct_status = await get_connection_status("direct")
+            connect_status = await get_connection_status("connect")
+            
+            if direct_status["active"]:
+                save_wifi_state("direct")
+            elif connect_status["active"]:
+                save_wifi_state("connect")
+            else:
+                save_wifi_state("disconnected")
+    except Exception as e:
+        logger.warning(f"Could not save final state on shutdown: {e}")
+    
     logger.info("Shutdown complete")
 
 # Pydantic models
@@ -82,7 +102,8 @@ class ConnectRequest(BaseModel):
     passphrase: Optional[str] = None
 
 class ForgetNetworkRequest(BaseModel):
-    ssid: str
+    ssid: Optional[str] = None
+    bssid: Optional[str] = None
 
 class ForgetAllRequest(BaseModel):
     pass
@@ -91,7 +112,9 @@ class NetworkInfo(BaseModel):
     ssid: str
     security: str
     signal_strength: Optional[int] = None
-    frequency: Optional[str] = None
+    frequency_band: Optional[str] = None
+    active: Optional[bool] = None
+    bssid: Optional[str] = None
 
 class ConnectedNetwork(BaseModel):
     ssid: str
@@ -144,6 +167,11 @@ _dnsmasq_process: Optional[subprocess.Popen] = None
 # Global cached networks - stores network list with timestamp
 _cached_networks: Optional[List[NetworkInfo]] = None
 _cached_networks_timestamp: Optional[float] = None
+
+# State persistence file path - can be configured
+def get_state_file_path() -> str:
+    """Get the state file path from config or use default"""
+    return config.get("wifi.state_file", "wifi_state.json")
 
 
 # Utility functions
@@ -284,7 +312,7 @@ def initialize_wifi_interface():
         logger.warning("No WiFi interface detected")
 
 async def startup_wifi_check():
-    """Check WiFi connectivity at startup and start WiFi Connect if needed"""
+    """Check WiFi connectivity at startup and restore previous state if available"""
     try:
         # Set startup flag to prevent cache clearing during startup
         startup_wifi_check._startup_in_progress = True
@@ -303,11 +331,64 @@ async def startup_wifi_check():
             logger.warning("No WiFi interface available, skipping startup check")
             return
         
-        # Check if there's already an active WiFi connection using the API endpoint
+        # Try to restore previous state first
+        saved_state = load_wifi_state()
+        if saved_state:
+            state = saved_state.get("state")
+            connected_network_data = saved_state.get("connected_network")
+            
+            logger.info(f"Found saved state: {state}")
+            
+            if state == "connected" and connected_network_data:
+                # Try to restore the connected network
+                try:
+                    logger.info(f"Attempting to restore connection to {connected_network_data['ssid']}")
+                    result = run_command(["nmcli", "connection", "up", connected_network_data["connection_name"]])
+                    
+                    if result["success"]:
+                        logger.info(f"Successfully restored connection to {connected_network_data['ssid']}")
+                        # Save the restored state
+                        connected_network = ConnectedNetwork(
+                            ssid=connected_network_data["ssid"],
+                            interface=connected_network_data["interface"],
+                            security=connected_network_data["security"],
+                            connection_name=connected_network_data["connection_name"]
+                        )
+                        save_wifi_state("connected", connected_network)
+                        return
+                    else:
+                        logger.warning(f"Failed to restore connection to {connected_network_data['ssid']}: {result.get('error', 'Unknown error')}")
+                except Exception as e:
+                    logger.warning(f"Error restoring connection: {e}")
+            
+            elif state == "direct":
+                # Restore WiFi Direct mode
+                logger.info("Restoring WiFi Direct mode")
+                direct_result = await manage_wifi_connection("direct", True)
+                if direct_result["success"]:
+                    logger.info("WiFi Direct mode restored successfully")
+                    save_wifi_state("direct")
+                    return
+                else:
+                    logger.warning(f"Failed to restore WiFi Direct mode: {direct_result['message']}")
+            
+            elif state == "connect":
+                # Restore WiFi Connect mode
+                logger.info("Restoring WiFi Connect mode")
+                connect_result = await manage_wifi_connection("connect", True)
+                if connect_result["success"]:
+                    logger.info("WiFi Connect mode restored successfully")
+                    save_wifi_state("connect")
+                    return
+                else:
+                    logger.warning(f"Failed to restore WiFi Connect mode: {connect_result['message']}")
+        
+        # If no saved state or restoration failed, check current connection status
         try:
             connected_response = await list_connected()
             if hasattr(connected_response, 'connected') and connected_response.connected:
-                logger.info(f"WiFi network already connected to {connected_response.connected.ssid}, no action needed")
+                logger.info(f"WiFi network already connected to {connected_response.connected.ssid}")
+                save_wifi_state("connected", connected_response.connected)
                 return
             else:
                 logger.info("No active WiFi connection found")
@@ -355,6 +436,7 @@ async def startup_wifi_check():
         
         if connect_result["success"]:
             logger.info("WiFi Connect mode started successfully")
+            save_wifi_state("connect")
         else:
             logger.error(f"Failed to start WiFi Connect mode: {connect_result['message']}")
             
@@ -411,6 +493,90 @@ def clear_network_cache() -> None:
     _cached_networks = None
     _cached_networks_timestamp = None
     logger.debug("Network cache cleared")
+
+def save_wifi_state(state: str, connected_network: Optional[ConnectedNetwork] = None) -> None:
+    """Save the current WiFi state to file"""
+    try:
+        state_file = get_state_file_path()
+        state_data = {
+            "state": state,  # "direct", "connect", "connected", or "disconnected"
+            "timestamp": time.time(),
+            "connected_network": None
+        }
+        
+        if connected_network:
+            state_data["connected_network"] = {
+                "ssid": connected_network.ssid,
+                "interface": connected_network.interface,
+                "security": connected_network.security,
+                "connection_name": connected_network.connection_name
+            }
+        
+        # Create directory if it doesn't exist
+        state_dir = os.path.dirname(state_file)
+        if state_dir and not os.path.exists(state_dir):
+            os.makedirs(state_dir, exist_ok=True)
+        
+        with open(state_file, 'w') as f:
+            json.dump(state_data, f, indent=2)
+        
+        logger.info(f"Saved WiFi state: {state} to {state_file}")
+        
+    except Exception as e:
+        logger.error(f"Failed to save WiFi state: {e}")
+
+def load_wifi_state() -> Optional[Dict[str, Any]]:
+    """Load the WiFi state from file"""
+    try:
+        state_file = get_state_file_path()
+        if not os.path.exists(state_file):
+            logger.debug("No state file found")
+            return None
+        
+        with open(state_file, 'r') as f:
+            state_data = json.load(f)
+        
+        # Check if state is not too old (e.g., older than 24 hours)
+        state_age = time.time() - state_data.get("timestamp", 0)
+        max_age = config.get("wifi.state_max_age", 86400)  # 24 hours default
+        
+        if state_age > max_age:
+            logger.info(f"State file is too old ({state_age:.0f}s), ignoring")
+            # Clean up old state file
+            try:
+                os.remove(state_file)
+                logger.info("Removed old state file")
+            except Exception as cleanup_error:
+                logger.warning(f"Failed to remove old state file: {cleanup_error}")
+            return None
+        
+        logger.info(f"Loaded WiFi state: {state_data.get('state', 'unknown')} from {state_file}")
+        return state_data
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON in state file: {e}")
+        # Try to clean up corrupted state file
+        try:
+            state_file = get_state_file_path()
+            if os.path.exists(state_file):
+                os.remove(state_file)
+                logger.info("Removed corrupted state file")
+        except Exception as cleanup_error:
+            logger.warning(f"Failed to remove corrupted state file: {cleanup_error}")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to load WiFi state: {e}")
+        return None
+
+def clear_wifi_state() -> None:
+    """Clear the WiFi state file"""
+    try:
+        state_file = get_state_file_path()
+        if os.path.exists(state_file):
+            os.remove(state_file)
+            logger.info("Cleared WiFi state file")
+    except Exception as e:
+        logger.error(f"Failed to clear WiFi state: {e}")
 
 def create_dnsmasq_config() -> bool:
     """Create dnsmasq configuration file for WiFi Direct mode"""
@@ -574,24 +740,44 @@ def parse_network_security(security_info: str) -> str:
         return "open"
 
 def parse_signal_strength(signal_str: str) -> int:
-    """Parse signal strength from dBm to percentage"""
+    """Parse signal strength to percentage"""
     try:
         if not signal_str or signal_str == "N/A":
             return 0
         
-        # Remove dBm suffix and convert to int
-        signal_dbm = int(signal_str.replace(" dBm", ""))
+        # Clean the signal string
+        signal_clean = signal_str.strip().replace(" dBm", "")
+        signal_value = int(signal_clean)
         
-        # Convert dBm to percentage (rough approximation)
-        # -100 dBm = 0%, -50 dBm = 100%
-        if signal_dbm <= -100:
-            return 0
-        elif signal_dbm >= -50:
-            return 100
+        # If the value is already in a reasonable percentage range (0-100), use it directly
+        if 0 <= signal_value <= 100:
+            return signal_value
         else:
-            return int(((signal_dbm + 100) / 50) * 100)
+            return 1
+            
     except (ValueError, AttributeError):
         return 0
+
+def parse_frequency_band(channel_str: str) -> str:
+    """Parse channel to frequency band"""
+    try:
+        if not channel_str or channel_str == "N/A":
+            return "unknown"
+        
+        # Convert channel to int
+        channel = int(channel_str)
+        
+        # Determine frequency band based on channel
+        if 1 <= channel <= 14:
+            return "2.4GHz"
+        elif 36 <= channel <= 64 or 100 <= channel <= 165:
+            return "5GHz"
+        elif 1 <= channel <= 233:  # 6GHz channels (WiFi 6E)
+            return "6GHz"
+        else:
+            return f"Channel {channel}"
+    except (ValueError, AttributeError):
+        return "unknown"
 
 # API Endpoints
 
@@ -723,6 +909,9 @@ async def manage_wifi_connection(connection_type: str, enable: bool) -> dict:
             if not hasattr(startup_wifi_check, '_startup_in_progress'):
                 clear_network_cache()
             
+            # Save the new state
+            save_wifi_state(connection_type)
+            
             logger.info(f"{mode_name} mode enabled successfully")
             return {
                 "success": True,
@@ -754,6 +943,9 @@ async def manage_wifi_connection(connection_type: str, enable: bool) -> dict:
             # Clear network cache when stopping hotspot
             clear_network_cache()
             await list_networks(use_cache=False, force_scan=True)
+            
+            # Save the disconnected state
+            save_wifi_state("disconnected")
             
             logger.info(f"{mode_name} mode disabled successfully")
             return {
@@ -928,7 +1120,7 @@ async def list_networks(use_cache: bool = True, force_scan: bool = False):
             networks = []
             
             for retry_count in range(max_retries):
-                scan_result = run_command(["nmcli", "device", "wifi", "rescan"])
+                scan_result = run_command(["nmcli", "device", "wifi", "rescan", "ifname", get_wifi_interface()])
                 if not scan_result["success"]:
                     logger.warning(f"Scan failed: {scan_result.get('error', 'Unknown error')}")
                 else:
@@ -937,8 +1129,8 @@ async def list_networks(use_cache: bool = True, force_scan: bool = False):
                 
                 # Get available networks
                 result = run_command([
-                    "nmcli", "-t", "-f", "SSID,SECURITY,SIGNAL,FREQ", 
-                    "device", "wifi", "list"
+                    "nmcli", "-t", "-f", "ACTIVE,SSID,BSSID,SECURITY,CHAN,SIGNAL", 
+                    "device", "wifi", "list", "ifname", get_wifi_interface()
                 ])
                 
                 if not result["success"]:
@@ -957,22 +1149,33 @@ async def list_networks(use_cache: bool = True, force_scan: bool = False):
                     continue
                 
                 networks = []
+                seen_bssids = set()  # Track BSSIDs to avoid duplicates
+                
                 for line in output_lines:
                     if line and '\n' not in line:
                         parts = line.split(':')
-                        if len(parts) >= 4:
-                            ssid = parts[0]
-                            security = parse_network_security(parts[1])
-                            signal = parse_signal_strength(parts[2])
-                            freq = parts[3] if len(parts) > 3 else None
+                        if len(parts) >= 6:
+                            active = parts[0].strip() == "*"
+                            ssid = parts[1]
+                            bssid = parts[2]
+                            security = parse_network_security(parts[3])
+                            frequency_band = parse_frequency_band(parts[4]) if len(parts) > 4 else "unknown"
+                            signal = parse_signal_strength(parts[5]) if len(parts) > 5 else 0
                             
                             # Skip empty SSIDs and special networks
                             if ssid and not ssid.startswith('*') and ssid != "--":
+                                # Skip if we've already seen this BSSID
+                                if bssid in seen_bssids:
+                                    continue
+                                
+                                seen_bssids.add(bssid)
                                 networks.append(NetworkInfo(
                                     ssid=ssid,
                                     security=security,
                                     signal_strength=signal,
-                                    frequency=freq
+                                    frequency_band=frequency_band,
+                                    active=active,
+                                    bssid=bssid
                                 ))
                 
                 # If we have more than 1 line in output, we're good
@@ -1007,69 +1210,7 @@ async def list_networks(use_cache: bool = True, force_scan: bool = False):
             return ErrorResponse(
                 error="scan_failed",
                 message=f"Failed to scan networks: {str(scan_error)}"
-            )
-        
-        else:
-            # No hotspot active, proceed with normal scan
-            if not use_cache or force_scan:
-                # Retry logic for low output lines
-                max_retries = config.get("wifi.scan_retries", 3)
-                networks = []
-                output_lines = []
-                for retry_count in range(max_retries):
-                    scan_result = run_command(["nmcli", "device", "wifi", "rescan"])
-                    if not scan_result["success"]:
-                        logger.warning(f"Scan failed: {scan_result.get('error', 'Unknown error')}")
-                    else:
-                        # Wait a bit for scan to complete
-                        time.sleep(config.get("wifi.rescan_delay", 2))
-                
-                    # Get available networks
-                    result = run_command([
-                        "nmcli", "-t", "-f", "SSID,SECURITY,SIGNAL,FREQ", 
-                        "device", "wifi", "list"
-                    ])
-                    
-                    if not result["success"]:
-                        if retry_count == max_retries - 1:  # Last retry
-                            return ErrorResponse(
-                                error="scan_failed",
-                                message="Failed to get network list"
-                            )
-                        continue
-                    
-                    # Check if we have enough output lines
-                    output_lines = result["output"].split('\n')
-                    if len(output_lines) <= 1 and retry_count < max_retries - 1:
-                        logger.info(f"Only {len(output_lines)} line(s) in output, retrying scan ({retry_count + 1}/{max_retries})")
-                        time.sleep(2)  # Wait before retry
-                        continue
-                    else:
-                        break
-                for line in output_lines:
-                    if line and '\n' not in line:
-                        parts = line.split(':')
-                        if len(parts) >= 4:
-                            ssid = parts[0]
-                            security = parse_network_security(parts[1])
-                            signal = parse_signal_strength(parts[2])
-                            freq = parts[3] if len(parts) > 3 else None
-                            
-                            # Skip empty SSIDs and special networks
-                            if ssid and not ssid.startswith('*') and ssid != "--":
-                                networks.append(NetworkInfo(
-                                    ssid=ssid,
-                                    security=security,
-                                    signal_strength=signal,
-                                    frequency=freq
-                                ))
-            
-            # Cache the networks
-            set_cached_networks(networks)
-            logger.info(f"list_networks: Cached {len(networks)} networks")
-            
-            return NetworksResponse(networks=networks)
-            
+            )            
     except Exception as e:
         logger.error(f"Error listing networks: {e}")
         return ErrorResponse(
@@ -1239,11 +1380,12 @@ async def connect_to_network(request: ConnectRequest):
             if passphrase:
                 result = run_command([
                     "nmcli", "device", "wifi", "connect", ssid, 
-                    "password", passphrase
+                    "password", passphrase, "ifname", get_wifi_interface()
                 ])
             else:
                 result = run_command([
-                    "nmcli", "device", "wifi", "connect", ssid
+                    "nmcli", "device", "wifi", "connect", ssid,
+                    "ifname", get_wifi_interface()
                 ])
         
         if not result["success"]:
@@ -1266,15 +1408,30 @@ async def connect_to_network(request: ConnectRequest):
         # Clear network cache when connecting to a network
         clear_network_cache()
         
+        # Get the connected network info and save state
+        try:
+            connected_response = await list_connected()
+            if hasattr(connected_response, 'connected') and connected_response.connected:
+                save_wifi_state("connected", connected_response.connected)
+        except Exception as e:
+            logger.warning(f"Could not save connected state: {e}")
+        
         return SuccessResponse(success=True, message=f"Connected to {ssid}")
     except Exception as e:
         logger.error(f"Error connecting to network: {e}")
         return SuccessResponse(success=False, message="Connection failed")
 
-async def forget_network(ssid: str) -> dict:
-    """Remove all networks with the specified SSID"""
+async def forget_network(ssid: str = None, bssid: str = None) -> dict:
+    """Remove all networks with the specified SSID or BSSID"""
     try:
-        # Get all connections and find all with matching SSID
+        # Validate input parameters
+        if not ssid and not bssid:
+            return {
+                "success": False,
+                "message": "Either SSID or BSSID must be provided"
+            }
+        
+        # Get all connections and find all with matching SSID or BSSID
         result = run_command([
             "nmcli", "-t", "-f", "NAME,TYPE", "connection", "show"
         ])
@@ -1287,7 +1444,7 @@ async def forget_network(ssid: str) -> dict:
         
         connections_to_delete = []
         
-        # Find all connections with matching SSID
+        # Find all connections with matching SSID or BSSID
         for line in result["output"].splitlines():
             line = line.strip()
             if line and ':' in line:
@@ -1295,14 +1452,15 @@ async def forget_network(ssid: str) -> dict:
                 if len(parts) >= 2:
                     name, conn_type = parts[0], parts[1]
                     if conn_type == "802-11-wireless":
-                        # Check if this connection has the matching SSID
+                        # Check if this connection has the matching SSID or BSSID
                         detail_result = run_command([
-                            "nmcli", "-t", "-f", "802-11-wireless.ssid,802-11-wireless.mode",
+                            "nmcli", "-t", "-f", "802-11-wireless.ssid,802-11-wireless.mode,802-11-wireless.bssid",
                             "connection", "show", name
                         ])
                         
                         if detail_result["success"]:
                             connection_ssid = ""
+                            connection_bssid = ""
                             mode = ""
                             for detail_line in detail_result["output"].splitlines():
                                 if ':' in detail_line:
@@ -1311,16 +1469,34 @@ async def forget_network(ssid: str) -> dict:
                                         connection_ssid = value.strip()
                                     elif key == "802-11-wireless.mode":
                                         mode = value.strip().lower()
+                                    elif key == "802-11-wireless.bssid":
+                                        connection_bssid = value.strip()
                             
-                            # Skip AP mode connections and match SSID
-                            if mode != "ap" and connection_ssid == ssid:
+                            # Skip AP mode connections
+                            if mode == "ap":
+                                continue
+                            
+                            # Match by SSID or BSSID
+                            match_found = False
+                            if ssid and connection_ssid == ssid:
+                                match_found = True
+                            elif bssid and connection_bssid == bssid:
+                                match_found = True
+                            
+                            if match_found:
                                 connections_to_delete.append(name)
         
         if not connections_to_delete:
-            return {
-                "success": False, 
-                "message": f"No networks with SSID '{ssid}' found"
-            }
+            if bssid:
+                return {
+                    "success": False, 
+                    "message": f"No networks with BSSID '{bssid}' found"
+                }
+            else:
+                return {
+                    "success": False, 
+                    "message": f"No networks with SSID '{ssid}' found"
+                }
         
         # Delete all connections with matching SSID
         deleted_count = 0
@@ -1347,14 +1523,23 @@ async def forget_network(ssid: str) -> dict:
             connect_result = await manage_wifi_connection("connect", True)
             if connect_result["success"]:
                 logger.info("WiFi Connect mode started successfully")
+                # State is already saved by manage_wifi_connection
             else:
                 logger.warning(f"Failed to start WiFi Connect mode: {connect_result['message']}")
+                # Save disconnected state if WiFi Connect failed
+                save_wifi_state("disconnected")
         
         # Prepare response message
         if failed_connections:
-            message = f"Deleted {deleted_count} network(s) with SSID '{ssid}'. Failed to delete: {', '.join(failed_connections)}"
+            if bssid:
+                message = f"Deleted {deleted_count} network(s) with BSSID '{bssid}'. Failed to delete: {', '.join(failed_connections)}"
+            else:
+                message = f"Deleted {deleted_count} network(s) with SSID '{ssid}'. Failed to delete: {', '.join(failed_connections)}"
         else:
-            message = f"Successfully deleted {deleted_count} network(s) with SSID '{ssid}'"
+            if bssid:
+                message = f"Successfully deleted {deleted_count} network(s) with BSSID '{bssid}'"
+            else:
+                message = f"Successfully deleted {deleted_count} network(s) with SSID '{ssid}'"
         
         return {
             "success": len(failed_connections) == 0,
@@ -1362,10 +1547,12 @@ async def forget_network(ssid: str) -> dict:
         }
             
     except Exception as e:
-        logger.error(f"Error forgetting network {ssid}: {e}")
+        identifier = bssid if bssid else ssid
+        identifier_type = "BSSID" if bssid else "SSID"
+        logger.error(f"Error forgetting network {identifier_type} {identifier}: {e}")
         return {
             "success": False, 
-            "message": f"Error forgetting network '{ssid}': {str(e)}"
+            "message": f"Error forgetting network '{identifier}': {str(e)}"
         }
 
 
@@ -1373,7 +1560,13 @@ async def forget_network(ssid: str) -> dict:
 @app.post("/forget")
 async def forget_network_endpoint(request: ForgetNetworkRequest):
     """Remove a specific saved network"""
-    result = await forget_network(request.ssid)
+    if not request.ssid and not request.bssid:
+        return SuccessResponse(
+            success=False,
+            message="Either SSID or BSSID is required"
+        )
+    
+    result = await forget_network(ssid=request.ssid, bssid=request.bssid)
     return SuccessResponse(
         success=result["success"],
         message=result["message"]
@@ -1382,15 +1575,17 @@ async def forget_network_endpoint(request: ForgetNetworkRequest):
 @app.post("/forget-network")
 async def forget_network_endpoint_alt(request: dict):
     """Remove a specific saved network (alternative endpoint)"""
-    # Handle both 'network_name' and 'ssid' fields for compatibility
+    # Handle both 'network_name', 'ssid', and 'bssid' fields for compatibility
     ssid = request.get("ssid") or request.get("network_name")
-    if not ssid:
+    bssid = request.get("bssid")
+    
+    if not ssid and not bssid:
         return SuccessResponse(
             success=False,
-            message="SSID is required"
+            message="Either SSID or BSSID is required"
         )
     
-    result = await forget_network(ssid)
+    result = await forget_network(ssid=ssid, bssid=bssid)
     return SuccessResponse(
         success=result["success"],
         message=result["message"]
@@ -1430,7 +1625,11 @@ async def forget_all_networks(request: ForgetAllRequest):
             message = f"Successfully forgot {deleted_count} networks"
         
         # Start WiFi Connect mode after forgetting all networks
-        await manage_wifi_connection("connect", True)
+        connect_result = await manage_wifi_connection("connect", True)
+        if not connect_result["success"]:
+            logger.warning(f"Failed to start WiFi Connect mode after forgetting all: {connect_result['message']}")
+            # Save disconnected state if WiFi Connect failed
+            save_wifi_state("disconnected")
         
         return SuccessResponse(
             success=len(failed_networks) == 0,  # Success only if no failures
