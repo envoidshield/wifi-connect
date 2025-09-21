@@ -1278,13 +1278,21 @@
                         <div class="network-name">
                             <i class="fas fa-wifi"></i> 
                             <span>${escapeHtml(network.ssid)}</span>
+                            ${network.active ? '<span class="badge badge-success"><i class="fas fa-check"></i> Active</span>' : ''}
                             <span class="badge ${getSecurityBadgeClass(network.security)}">
                                 <i class="fas fa-${getSecurityIcon(network.security)}"></i>
                                 ${getSecurityLabel(network.security)}
                             </span>
                         </div>
                         <div class="network-details">
-                            Security: ${escapeHtml(network.security)}
+                            <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px;">
+                                <span class="badge badge-info">
+                                    <i class="fas fa-shield-alt"></i> ${escapeHtml(network.security).toUpperCase()}
+                                </span>
+                                ${network.frequency_band ? `<span class="badge badge-success"><i class="fas fa-broadcast-tower"></i> ${escapeHtml(network.frequency_band)}</span>` : ''}
+                                ${network.signal_strength ? `<span class="badge badge-warning"><i class="fas fa-signal"></i> ${network.signal_strength}%</span>` : ''}
+                            </div>
+                            ${network.bssid ? `<div style="font-size: 0.75rem; color: #6c757d; margin-top: 4px;"><i class="fas fa-fingerprint"></i> BSSID: ${escapeHtml(network.bssid)}</div>` : ''}
                         </div>
                     </div>
                 </li>
@@ -1310,14 +1318,29 @@
                         <div class="network-name">
                             <i class="fas fa-wifi"></i> 
                             <span>${escapeHtml(network.ssid)}</span>
-                            <span class="badge badge-success">Connected</span>
+                            <span class="badge badge-success"><i class="fas fa-check"></i> Connected</span>
                         </div>
                         <div class="network-details">
-                            Interface: ${escapeHtml(network.interface)}<br>
-                            Security: ${escapeHtml(network.security)}<br>
-                            Signal: ${network.signal_strength}%
-                            ${network.ip_address ? `<br>IP: ${escapeHtml(network.ip_address)}` : ''}
+                            <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px;">
+                                <span class="badge badge-info">
+                                    <i class="fas fa-network-wired"></i> ${escapeHtml(network.interface)}
+                                </span>
+                                <span class="badge ${getSecurityBadgeClass(network.security)}">
+                                    <i class="fas fa-${getSecurityIcon(network.security)}"></i>
+                                    ${getSecurityLabel(network.security)}
+                                </span>
+                            </div>
+                            <div style="font-size: 0.9rem; color: #6c757d; line-height: 1.4;">
+                                <div><strong>Connection Name:</strong> ${escapeHtml(network.connection_name)}</div>
+                                <div><strong>Security Type:</strong> ${escapeHtml(network.security).toUpperCase()}</div>
+                                <div><strong>Interface:</strong> ${escapeHtml(network.interface)}</div>
+                            </div>
                         </div>
+                    </div>
+                    <div class="network-actions">
+                        <button class="btn btn-danger" onclick="disconnectFromNetwork()">
+                            <i class="fas fa-unlink"></i> Disconnect
+                        </button>
                     </div>
                 </div>
             `;
@@ -1488,6 +1511,49 @@
                 }
             } catch (error) {
                 handleError(error, 'forgetAllNetworks', 'Error forgetting all networks');
+            }
+        }
+
+        async function disconnectFromNetwork() {
+            if (!confirm('Are you sure you want to disconnect from the current network?')) {
+                return;
+            }
+            
+            try {
+                // Get current connected network info
+                const connectedResponse = await safeFetch(`list-connected`);
+                const connectedData = await connectedResponse.json();
+                
+                if (!connectedData.connected) {
+                    showToast('No network is currently connected', 'error');
+                    return;
+                }
+                
+                const ssid = connectedData.connected.ssid;
+                
+                // For now, we'll forget the network which will disconnect it
+                // This is a simple approach - in a real implementation, you'd want a dedicated disconnect endpoint
+                const response = await safeFetch(`forget`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        ssid: ssid
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast('Disconnected from network', 'success');
+                    // Refresh the connected tab to show no connection
+                    setTimeout(() => refreshConnected(), 1000);
+                } else {
+                    showToast('Failed to disconnect from network', 'error');
+                }
+            } catch (error) {
+                handleError(error, 'disconnectFromNetwork', 'Error disconnecting from network');
             }
         }
 

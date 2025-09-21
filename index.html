@@ -810,13 +810,14 @@
                     <div class="network-info">
                         <h3>📶 ${escapeHtml(network.ssid)} ${network.active ? '<span style="color: #10b981;">✓ Active</span>' : ''}</h3>
                         <div class="network-details">
-                            Security: ${escapeHtml(network.security)}
-                            ${network.signal_strength ? ` • Signal: ${network.signal_strength}%` : ''}
-                            ${network.frequency_band ? ` • ${escapeHtml(network.frequency_band)}` : ''}
-                            ${network.bssid ? ` • BSSID: ${escapeHtml(network.bssid)}` : ''}
-                            <span class="security-badge ${network.security === 'open' ? 'open' : 'secure'}">
-                                ${network.security === 'open' ? '🔓 Open' : '🔒 Secured'}
-                            </span>
+                            <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 8px;">
+                                <span style="background: #e0e7ff; color: #3730a3; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 500;">
+                                    ${escapeHtml(network.security).toUpperCase()}
+                                </span>
+                                ${network.frequency_band ? `<span style="background: #f0fdf4; color: #166534; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 500;">${escapeHtml(network.frequency_band)}</span>` : ''}
+                                ${network.signal_strength ? `<span style="background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 500;">📶 ${network.signal_strength}%</span>` : ''}
+                            </div>
+                            ${network.bssid ? `<div style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">BSSID: ${escapeHtml(network.bssid)}</div>` : ''}
                         </div>
                     </div>
                 </li>

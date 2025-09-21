@@ -1286,7 +1286,7 @@ async def get_wifi_connections(active_only: bool = False):
         for connection_name, wifi_interface in connections:
             # Get connection details and check for AP mode
             detail_result = run_command([
-                "nmcli", "-t", "-f", "802-11-wireless.mode,802-11-wireless.ssid,802-11-wireless-security.key-mgmt,GENERAL.devices,GENERAL.ip-iface",
+                "nmcli", "-t", "-f", "802-11-wireless.ssid,802-11-wireless-security.key-mgmt,GENERAL.devices,802-11-wireless.seen-bssids,802-11-wireless.mode",
                 "connection", "show", connection_name
             ])
             
@@ -1294,10 +1294,11 @@ async def get_wifi_connections(active_only: bool = False):
                 continue
             
             # Parse the output
-            mode = ""
             ssid = ""
             security = "open"
             interface = ""
+            seen_bssids = ""
+            mode = ""
             
             for line in detail_result["output"].splitlines():
                 line = line.strip()
@@ -1307,16 +1308,16 @@ async def get_wifi_connections(active_only: bool = False):
                 key = key.strip().lower()
                 value = value.strip()
                 
-                if key == "802-11-wireless.mode":
-                    mode = value.lower()
-                elif key == "802-11-wireless.ssid":
+                if key == "802-11-wireless.ssid":
                     ssid = value
                 elif key == "802-11-wireless-security.key-mgmt":
                     security = value
                 elif key == "general.devices" and value:
                     interface = value
-                elif key == "general.ip-iface" and value and not interface:
-                    interface = value
+                elif key == "802-11-wireless.seen-bssids":
+                    seen_bssids = value
+                elif key == "802-11-wireless.mode":
+                    mode = value.lower()
             
             # Skip AP mode connections
             if mode == "ap":
