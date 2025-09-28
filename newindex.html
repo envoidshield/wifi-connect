@@ -460,6 +460,39 @@
             color: #2c3e50;
         }
 
+        /* Signal bars styling */
+        .signal-bars {
+            display: inline-flex;
+            align-items: flex-end;
+            gap: 2px;
+            height: 16px;
+            margin-left: 4px;
+        }
+
+        .signal-bar {
+            width: 3px;
+            background: #28a745;
+            border-radius: 1px;
+            transition: all 0.2s ease;
+        }
+
+        .signal-bar:nth-child(1) { height: 4px; }
+        .signal-bar:nth-child(2) { height: 6px; }
+        .signal-bar:nth-child(3) { height: 8px; }
+        .signal-bar:nth-child(4) { height: 10px; }
+        .signal-bar:nth-child(5) { height: 12px; }
+
+        .signal-bar.inactive {
+            background: #dee2e6 !important;
+        }
+
+        /* Signal strength color coding - only apply to active bars */
+        .signal-excellent .signal-bar:not(.inactive) { background: #28a745; }
+        .signal-good .signal-bar:not(.inactive) { background: #17a2b8; }
+        .signal-fair .signal-bar:not(.inactive) { background: #ffc107; }
+        .signal-weak .signal-bar:not(.inactive) { background: #fd7e14; }
+        .signal-very-weak .signal-bar:not(.inactive) { background: #dc3545; }
+
         .modal {
             display: none;
             position: fixed;
@@ -745,6 +778,22 @@
                 right: 10px;
                 font-size: 0.9rem;
             }
+
+            /* Mobile signal bars */
+            .signal-bars {
+                height: 14px;
+                gap: 1px;
+            }
+
+            .signal-bar {
+                width: 2px;
+            }
+
+            .signal-bar:nth-child(1) { height: 3px; }
+            .signal-bar:nth-child(2) { height: 5px; }
+            .signal-bar:nth-child(3) { height: 7px; }
+            .signal-bar:nth-child(4) { height: 9px; }
+            .signal-bar:nth-child(5) { height: 11px; }
         }
 
         @media (max-width: 480px) {
@@ -1290,7 +1339,7 @@
                                     <i class="fas fa-shield-alt"></i> ${escapeHtml(network.security).toUpperCase()}
                                 </span>
                                 ${network.frequency_band ? `<span class="badge badge-success"><i class="fas fa-broadcast-tower"></i> ${escapeHtml(network.frequency_band)}</span>` : ''}
-                                ${network.signal_strength ? `<span class="badge badge-warning"><i class="fas fa-signal"></i> ${network.signal_strength}%</span>` : ''}
+                                ${network.signal_strength ? `<span class="badge badge-warning"><i class="fas fa-signal"></i> ${getSignalBars(network.signal_strength)}</span>` : ''}
                             </div>
                             ${network.bssid ? `<div style="font-size: 0.75rem; color: #6c757d; margin-top: 4px;"><i class="fas fa-fingerprint"></i> BSSID: ${escapeHtml(network.bssid)}</div>` : ''}
                         </div>
@@ -1722,6 +1771,38 @@
                 return 'Open';
             }
             return 'Secured';
+        }
+
+        function getSignalBars(strength) {
+            if (!strength || strength < 0) return '';
+            
+            let activeBars = 0;
+            let signalClass = '';
+            
+            if (strength > 80) {
+                activeBars = 5;
+                signalClass = 'signal-excellent';
+            } else if (strength > 60) {
+                activeBars = 4;
+                signalClass = 'signal-good';
+            } else if (strength > 40) {
+                activeBars = 3;
+                signalClass = 'signal-fair';
+            } else if (strength > 20) {
+                activeBars = 2;
+                signalClass = 'signal-weak';
+            } else {
+                activeBars = 1;
+                signalClass = 'signal-very-weak';
+            }
+            
+            let bars = '';
+            for (let i = 1; i <= 5; i++) {
+                const isActive = i <= activeBars;
+                bars += `<div class="signal-bar ${isActive ? '' : 'inactive'}"></div>`;
+            }
+            
+            return `<div class="signal-bars ${signalClass}">${bars}</div>`;
         }
 
         // Close modal when clicking outside
