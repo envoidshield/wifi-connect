@@ -1283,6 +1283,7 @@ async def get_wifi_connections(active_only: bool = False):
         
         # Get detailed information for each connection
         detailed_connections = []
+        bssids = []
         for connection_name, wifi_interface in connections:
             # Get connection details and check for AP mode
             detail_result = run_command([
@@ -1319,6 +1320,10 @@ async def get_wifi_connections(active_only: bool = False):
                 elif key == "802-11-wireless.mode":
                     mode = value.lower()
             
+            #ignore duplicates
+            if seen_bssids in bssids:
+                continue
+            bssids.append(seen_bssids)
             # Skip AP mode connections
             if mode == "ap":
                 logger.debug(f"Skipping AP mode connection: {connection_name}")
