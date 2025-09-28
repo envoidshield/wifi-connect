@@ -1664,7 +1664,7 @@ async def disconnect_from_network():
         # Save the disconnected state
         save_wifi_state("disconnected")
         #start wifi connect mode
-        manage_wifi_connection("connect", True)
+        await manage_wifi_connection("connect", True)
         
         logger.info(f"Successfully disconnected from {ssid}")
         return SuccessResponse(success=True, message=f"Disconnected from {ssid}")
