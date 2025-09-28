@@ -1520,27 +1520,13 @@
             }
             
             try {
-                // Get current connected network info
-                const connectedResponse = await safeFetch(`list-connected`);
-                const connectedData = await connectedResponse.json();
-                
-                if (!connectedData.connected) {
-                    showToast('No network is currently connected', 'error');
-                    return;
-                }
-                
-                const ssid = connectedData.connected.ssid;
-                
-                // For now, we'll forget the network which will disconnect it
-                // This is a simple approach - in a real implementation, you'd want a dedicated disconnect endpoint
-                const response = await safeFetch(`forget`, {
+
+                // Use the new disconnect endpoint
+                const response = await safeFetch(`disconnect`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        ssid: ssid
-                    })
+                    }
                 });
                 
                 const data = await response.json();

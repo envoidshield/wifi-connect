@@ -1628,6 +1628,40 @@ async def forget_network_endpoint_alt(request: dict):
         message=result["message"]
     )
 
+@app.post("/disconnect")
+async def disconnect_from_network():
+    """Disconnect from the currently connected network using nmcli con down"""
+    try:
+        # Get current connected network info
+        connected_response = await list_connected()
+        if not hasattr(connected_response, 'connected') or not connected_response.connected:
+            return SuccessResponse(success=False, message="No network is currently connected")
+        
+        connection_name = connected_response.connected.connection_name
+        ssid = connected_response.connected.ssid
+        
+        # Use nmcli con down to disconnect
+        result = run_command(["nmcli", "connection", "down", connection_name])
+        
+        if not result["success"]:
+            return SuccessResponse(
+                success=False, 
+                message=f"Failed to disconnect from {ssid}: {result.get('error', 'Unknown error')}"
+            )
+        
+        # Clear network cache when disconnecting
+        clear_network_cache()
+        
+        # Save the disconnected state
+        save_wifi_state("disconnected")
+        
+        logger.info(f"Successfully disconnected from {ssid}")
+        return SuccessResponse(success=True, message=f"Disconnected from {ssid}")
+        
+    except Exception as e:
+        logger.error(f"Error disconnecting from network: {e}")
+        return SuccessResponse(success=False, message="Failed to disconnect from network")
+
 @app.post("/forget-all")
 async def forget_all_networks(request: ForgetAllRequest):
     """Remove all saved networks"""
