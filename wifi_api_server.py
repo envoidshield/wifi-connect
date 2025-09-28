@@ -256,6 +256,15 @@ async def cleanup_startup_connections():
         logger.info(f"Looking for connections: '{connect_connection_name}' and '{direct_connection_name}'")
         
         connections_to_cleanup = [connect_connection_name, direct_connection_name]
+        
+        # Add configurable connections to delete
+        startup_cleanup_config = config.get("wifi.startup_cleanup", {})
+        if startup_cleanup_config.get("enabled", True):
+            additional_connections = startup_cleanup_config.get("connections_to_delete", [])
+            if additional_connections:
+                logger.info(f"Adding configurable connections to cleanup: {additional_connections}")
+                connections_to_cleanup.extend(additional_connections)
+        
         cleaned_count = 0
         
         for connection_name in connections_to_cleanup:

@@ -40,7 +40,11 @@ class Config:
                 "dhcp_range": "192.168.42.2,192.168.42.20",
                 "log_file": "/var/log/dnsmasq.log",
                 "cache_duration": 300,
-                "state_file": "data/wifi_state.json"
+                "state_file": "data/wifi_state.json",
+                "startup_cleanup": {
+                    "enabled": True,
+                    "connections_to_delete": ["resin-wifi", "balena-wifi-01"]
+                }
             },
               "direct": {
                 "hotspot_name": "Envoid-Direct",
@@ -91,6 +95,8 @@ class Config:
             "WIFI_CORS_ORIGINS": ("cors", "origins"),
             "WIFI_HOTSPOT_NAME": ("wifi", "hotspot_name"),
             "DIRECT_HOTSPOT_NAME": ("direct", "hotspot_name"),
+            "WIFI_STARTUP_CLEANUP_ENABLED": ("wifi", "startup_cleanup", "enabled"),
+            "WIFI_STARTUP_CLEANUP_CONNECTIONS": ("wifi", "startup_cleanup", "connections_to_delete"),
         }
         
         for env_var, config_path in env_mappings.items():
@@ -99,6 +105,8 @@ class Config:
                 # Navigate to the nested config location
                 current = config
                 for key in config_path[:-1]:
+                    if key not in current:
+                        current[key] = {}
                     current = current[key]
                 
                 # Convert value based on expected type
@@ -110,8 +118,8 @@ class Config:
                         print(f"Warning: Invalid integer value for {env_var}: {value}")
                 elif key in ["enabled", "startup_check"]:
                     current[key] = value.lower() in ["true", "1", "yes", "on"]
-                elif key == "origins":
-                    current[key] = [origin.strip() for origin in value.split(",")]
+                elif key in ["origins", "connections_to_delete"]:
+                    current[key] = [item.strip() for item in value.split(",")]
                 else:
                     current[key] = value
         
