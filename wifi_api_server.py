@@ -1321,7 +1321,7 @@ async def get_wifi_connections(active_only: bool = False):
                     mode = value.lower()
             
             #ignore duplicates
-            if seen_bssids in bssids:
+            if seen_bssids in bssids or seen_bssids == "":
                 continue
             bssids.append(seen_bssids)
             # Skip AP mode connections
