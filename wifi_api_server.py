@@ -1281,11 +1281,16 @@ async def get_wifi_connections(active_only: bool = False):
             if not line or line.startswith("Warning:"):
                 continue
             parts = line.split(":")
-            if len(parts) >= 3:
-                name, conn_type, device = parts[0], parts[1], parts[2]
+            
+            # Handle variable number of parts in nmcli output
+            if len(parts) >= 1:
+                name = parts[0]
+                conn_type = parts[1] if parts[1] else "unknown"
+                device = parts[2] if len(parts) >= 3 and parts[2] else "unknown"
+                
                 if conn_type in ("wifi", "802-11-wireless"):
                     # For active connections, check if device is actually connected
-                    if active_only and device and device != "--":
+                    if active_only and device and device != "--" and device != "unknown":
                         connections.append((name, device))
                     elif not active_only:
                         connections.append((name, device))
@@ -1421,8 +1426,24 @@ async def connect_to_network(request: ConnectRequest):
         check_result = run_command(["nmcli", "connection", "show", ssid])
         
         if check_result["success"]:
-            # Network is saved, just connect
-            result = run_command(["nmcli", "connection", "up", ssid])
+            # Network is saved
+            if passphrase:
+                # If password is provided, delete the old connection and create a new one
+                logger.info(f"Connection '{ssid}' exists but password provided, updating connection")
+                
+                # Delete the existing connection
+                delete_result = run_command(["nmcli", "connection", "delete", ssid])
+                if not delete_result["success"]:
+                    logger.warning(f"Failed to delete existing connection '{ssid}': {delete_result.get('error', 'Unknown error')}")
+                
+                # Create new connection with password
+                result = run_command([
+                    "nmcli", "device", "wifi", "connect", ssid, 
+                    "password", passphrase, "ifname", get_wifi_interface()
+                ])
+            else:
+                # No password provided, just connect to existing connection
+                result = run_command(["nmcli", "connection", "up", ssid])
         else:
             # New network, create connection
             if passphrase:
