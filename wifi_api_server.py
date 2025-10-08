@@ -241,10 +241,128 @@ def _detect_wifi_interface() -> Optional[str]:
         logger.error(f"Error detecting WiFi interface: {e}")
         return None
 
+def save_connection_credentials(connection_name: str) -> Optional[Dict[str, str]]:
+    """Save connection credentials before cleanup"""
+    try:
+        logger.debug(f"Saving credentials for connection: '{connection_name}'")
+        
+        # Get SSID and password using nmcli
+        result = run_command([
+            "nmcli", "-s", "-g", "802-11-wireless.ssid,802-11-wireless-security.psk", 
+            "connection", "show", connection_name
+        ])
+        
+        if not result["success"]:
+            logger.debug(f"Could not get credentials for '{connection_name}': {result.get('error', 'Unknown error')}")
+            return None
+        
+        # Parse the output (format: SSID\nPASSWORD)
+        output_lines = result["output"].strip().split('\n')
+        if len(output_lines) >= 2:
+            ssid = output_lines[0].strip()
+            password = output_lines[1].strip()
+            
+            if ssid and ssid != "--":
+                credentials = {
+                    "ssid": ssid,
+                    "password": password if password and password != "--" else None
+                }
+                logger.info(f"Saved credentials for '{connection_name}': SSID='{ssid}'")
+                return credentials
+            else:
+                logger.debug(f"No valid SSID found for '{connection_name}'")
+                return None
+        else:
+            logger.debug(f"Invalid credentials format for '{connection_name}'")
+            return None
+            
+    except Exception as e:
+        logger.error(f"Error saving credentials for '{connection_name}': {e}")
+        return None
+
+async def restore_connection(credentials: Dict[str, str], connection_name: str) -> bool:
+    """Restore a connection using saved credentials and the existing connect function"""
+    try:
+        ssid = credentials.get("ssid")
+        password = credentials.get("password")
+        
+        if not ssid:
+            logger.warning(f"No SSID found in credentials for '{connection_name}'")
+            return False
+        
+        logger.info(f"Restoring connection '{connection_name}' to SSID '{ssid}'")
+        
+        # Use the existing connect function by creating a ConnectRequest
+        # Create request object using the existing ConnectRequest class
+        connect_request = ConnectRequest(ssid=ssid, passphrase=password)
+        
+        # Call the existing connect function
+        result = await connect_to_network(connect_request)
+        
+        if hasattr(result, 'success') and result.success:
+            logger.info(f"Successfully restored connection to '{ssid}'")
+            return True
+        else:
+            logger.warning(f"Failed to restore connection to '{ssid}': {getattr(result, 'message', 'Unknown error')}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error restoring connection '{connection_name}': {e}")
+        return False
+
+def ensure_data_directory():
+    """Ensure the data directory exists for persistence"""
+    try:
+        data_dir = "data"
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir, exist_ok=True)
+            logger.info(f"Created data directory: {data_dir}")
+        return True
+    except Exception as e:
+        logger.error(f"Error creating data directory: {e}")
+        return False
+
+def get_cleanup_indicator_path() -> str:
+    """Get the path to the cleanup completion indicator file"""
+    return os.path.join("data", "cleanup_restore_completed.json")
+
+def is_cleanup_restore_completed() -> bool:
+    """Check if cleanup and restore has already been completed"""
+    try:
+        indicator_path = get_cleanup_indicator_path()
+        return os.path.exists(indicator_path)
+    except Exception as e:
+        logger.error(f"Error checking cleanup indicator: {e}")
+        return False
+
+def mark_cleanup_restore_completed(restored_connections: List[str]) -> bool:
+    """Mark that cleanup and restore has been completed"""
+    try:
+        ensure_data_directory()
+        indicator_path = get_cleanup_indicator_path()
+        
+        indicator_data = {
+            "completed": True,
+            "timestamp": time.time(),
+            "restored_connections": restored_connections
+        }
+        
+        with open(indicator_path, 'w') as f:
+            json.dump(indicator_data, f, indent=2)
+        
+        logger.info(f"Marked cleanup/restore as completed. Indicator saved to: {indicator_path}")
+        return True
+    except Exception as e:
+        logger.error(f"Error marking cleanup as completed: {e}")
+        return False
+
 async def cleanup_startup_connections():
     """Clean up existing connect and direct connections at startup"""
     try:
         logger.info("Starting cleanup of existing connect and direct connections...")
+        
+        # Ensure data directory exists
+        ensure_data_directory()
         
         # Get connection names from config
         connect_config = config.get_connect_config()
@@ -265,8 +383,21 @@ async def cleanup_startup_connections():
                 logger.info(f"Adding configurable connections to cleanup: {additional_connections}")
                 connections_to_cleanup.extend(additional_connections)
         
+        # Check if restore has already been completed (only affects restoration, not cleanup)
+        restore_already_done = is_cleanup_restore_completed()
+        
+        # Save credentials for all connections before cleanup (only if restore not done)
+        saved_credentials = {}
+        if not restore_already_done:
+            for connection_name in connections_to_cleanup:
+                logger.debug(f"Saving credentials for connection: '{connection_name}'")
+                credentials = save_connection_credentials(connection_name)
+                if credentials:
+                    saved_credentials[connection_name] = credentials
+        
         cleaned_count = 0
         
+        # Always perform cleanup (removal) regardless of restore status
         for connection_name in connections_to_cleanup:
             logger.debug(f"Checking connection: '{connection_name}'")
             
@@ -304,7 +435,25 @@ async def cleanup_startup_connections():
         else:
             logger.debug("No dnsmasq process was running")
         
-        logger.info(f"Startup connection cleanup completed - removed {cleaned_count} connections")
+        # Only restore connections if restore hasn't been done before
+        restored_count = 0
+        restored_connections = []
+        
+        if restore_already_done:
+            logger.info("Connection restoration has already been completed. Skipping restoration to avoid recreating connections.")
+        else:
+            # Restore connections that had saved credentials
+            for connection_name, credentials in saved_credentials.items():
+                logger.info(f"Attempting to restore connection '{connection_name}'...")
+                if await restore_connection(credentials, connection_name):
+                    restored_count += 1
+                    restored_connections.append(connection_name)
+            
+            # Mark restore as completed to prevent future recreations
+            if restored_count > 0:
+                mark_cleanup_restore_completed(restored_connections)
+        
+        logger.info(f"Startup connection cleanup completed - removed {cleaned_count} connections, restored {restored_count} connections")
         
     except Exception as e:
         logger.error(f"Error during startup connection cleanup: {e}")
