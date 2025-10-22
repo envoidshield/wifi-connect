@@ -996,6 +996,7 @@ async def manage_wifi_connection(connection_type: str, enable: bool) -> dict:
             }
         hotspot_name = wifi_config["hotspot_name"]
         connection_name = wifi_config["connection_name"]
+        hotspot_password = wifi_config["hotspot_password"]
         wifi_interface = get_wifi_interface()
         
         if not wifi_interface:
@@ -1021,6 +1022,13 @@ async def manage_wifi_connection(connection_type: str, enable: bool) -> dict:
                     "con-name", connection_name,
                     "ssid", hotspot_name
                 ]
+                
+                # Add password if configured
+                if hotspot_password:
+                    create_cmd.extend(["wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", hotspot_password])
+                    logger.info(f"Creating {mode_name} hotspot with password protection")
+                else:
+                    logger.info(f"Creating {mode_name} hotspot without password (open network)")
                 
                 result = run_command(create_cmd)
                 if not result["success"]:
@@ -1051,6 +1059,22 @@ async def manage_wifi_connection(connection_type: str, enable: bool) -> dict:
                         "success": False,
                         "message": f"Failed to configure {mode_name} hotspot: {modify_result.get('error', 'Unknown error')}"
                     }
+            else:
+                # Connection already exists, check if password needs to be updated
+                hotspot_password = wifi_config.get("hotspot_password")
+                if hotspot_password:
+                    logger.info(f"Updating existing {mode_name} connection with password protection")
+                    # Update the connection with password
+                    password_cmd = [
+                        "nmcli", "connection", "modify", connection_name,
+                        "wifi-sec.key-mgmt", "wpa-psk",
+                        "wifi-sec.psk", hotspot_password
+                    ]
+                    password_result = run_command(password_cmd)
+                    if not password_result["success"]:
+                        logger.warning(f"Failed to update {mode_name} connection with password: {password_result.get('error', 'Unknown error')}")
+                else:
+                    logger.info(f"Using existing {mode_name} connection without password")
             
             # Enable autoconnect and start the hotspot connection
             autoconnect_result = run_command([
