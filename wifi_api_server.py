@@ -996,7 +996,7 @@ async def manage_wifi_connection(connection_type: str, enable: bool) -> dict:
             }
         hotspot_name = wifi_config["hotspot_name"]
         connection_name = wifi_config["connection_name"]
-        hotspot_password = wifi_config["hotspot_password"]
+        hotspot_password = config.get("wifi.hotspot_password", "")
         wifi_interface = get_wifi_interface()
         
         if not wifi_interface:
