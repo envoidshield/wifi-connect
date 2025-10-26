@@ -455,9 +455,64 @@ async def cleanup_startup_connections():
         
         logger.info(f"Startup connection cleanup completed - removed {cleaned_count} connections, restored {restored_count} connections")
         
+        # Ensure all connections (including restored ones) have autoconnect=no
+        ensure_all_connections_autoconnect_no()
+        
     except Exception as e:
         logger.error(f"Error during startup connection cleanup: {e}")
         logger.error(f"Cleanup error details: {str(e)}", exc_info=True)
+
+def ensure_all_connections_autoconnect_no():
+    """Ensure all existing WiFi connections have autoconnect=no"""
+    try:
+        logger.info("Ensuring all WiFi connections have autoconnect=no...")
+        
+        # Get all WiFi connections
+        result = run_command(["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show"])
+        if not result["success"] or not result["output"]:
+            logger.debug("No connections found")
+            return
+        
+        connections_updated = 0
+        for line in result["output"].splitlines():
+            line = line.strip()
+            if not line or line.startswith("Warning:") or ":" not in line:
+                continue
+            
+            parts = line.split(":")
+            if len(parts) >= 2:
+                connection_name = parts[0]
+                connection_type = parts[1]
+                
+                # Only process WiFi connections
+                if connection_type in ("wifi", "802-11-wireless"):
+                    # Check current autoconnect setting
+                    check_result = run_command([
+                        "nmcli", "-t", "-f", "connection.autoconnect", 
+                        "connection", "show", connection_name
+                    ])
+                    
+                    if check_result["success"] and check_result["output"]:
+                        current_autoconnect = check_result["output"].strip()
+                        if current_autoconnect.lower() != "no":
+                            # Set autoconnect=no
+                            modify_result = run_command([
+                                "nmcli", "connection", "modify", connection_name, 
+                                "connection.autoconnect", "no"
+                            ])
+                            if modify_result["success"]:
+                                logger.debug(f"Set autoconnect=no for connection: {connection_name}")
+                                connections_updated += 1
+                            else:
+                                logger.warning(f"Failed to set autoconnect=no for {connection_name}: {modify_result.get('error', 'Unknown error')}")
+        
+        if connections_updated > 0:
+            logger.info(f"Updated autoconnect=no for {connections_updated} WiFi connections")
+        else:
+            logger.debug("All WiFi connections already have autoconnect=no")
+            
+    except Exception as e:
+        logger.error(f"Error ensuring autoconnect=no for connections: {e}")
 
 def initialize_wifi_interface():
     """Initialize the cached WiFi interface at startup"""
@@ -474,6 +529,10 @@ async def startup_wifi_check():
     try:
         # Set startup flag to prevent cache clearing during startup
         startup_wifi_check._startup_in_progress = True
+        
+        # Ensure all existing connections have autoconnect=no
+        ensure_all_connections_autoconnect_no()
+        
         await cleanup_startup_connections()
         
         # Check if startup check is enabled
