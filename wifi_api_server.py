@@ -1599,6 +1599,10 @@ async def connect_to_network(request: ConnectRequest):
         # Check if network is already saved
         check_result = run_command(["nmcli", "connection", "show", ssid])
         
+        # Prepare base connection command with autoconnect=no
+        wifi_interface = get_wifi_interface()
+        base_connect_cmd = ["nmcli", "device", "wifi", "connect", ssid, "ifname", wifi_interface, "autoconnect", "no"]
+        
         if check_result["success"]:
             # Network is saved
             if passphrase:
@@ -1610,26 +1614,25 @@ async def connect_to_network(request: ConnectRequest):
                 if not delete_result["success"]:
                     logger.warning(f"Failed to delete existing connection '{ssid}': {delete_result.get('error', 'Unknown error')}")
                 
-                # Create new connection with password
-                result = run_command([
-                    "nmcli", "device", "wifi", "connect", ssid, 
-                    "password", passphrase, "ifname", get_wifi_interface()
-                ])
+                # Create new connection with password and autoconnect=no
+                connect_cmd = base_connect_cmd + ["password", passphrase]
+                result = run_command(connect_cmd)
             else:
                 # No password provided, just connect to existing connection
+                # First set autoconnect=no for the existing connection
+                modify_result = run_command(["nmcli", "connection", "modify", ssid, "autoconnect", "no"])
+                if not modify_result["success"]:
+                    logger.warning(f"Failed to set autoconnect=no for connection '{ssid}': {modify_result.get('error', 'Unknown error')}")
                 result = run_command(["nmcli", "connection", "up", ssid])
         else:
             # New network, create connection
             if passphrase:
-                result = run_command([
-                    "nmcli", "device", "wifi", "connect", ssid, 
-                    "password", passphrase, "ifname", get_wifi_interface()
-                ])
+                # Create connection with password and autoconnect=no
+                connect_cmd = base_connect_cmd + ["password", passphrase]
+                result = run_command(connect_cmd)
             else:
-                result = run_command([
-                    "nmcli", "device", "wifi", "connect", ssid,
-                    "ifname", get_wifi_interface()
-                ])
+                # Create connection without password and autoconnect=no
+                result = run_command(base_connect_cmd)
         
         if not result["success"]:
             # If connection failed and we had a hotspot active, restart it using existing functions
