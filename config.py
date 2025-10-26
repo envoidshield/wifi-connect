@@ -40,7 +40,7 @@ class Config:
                 "dhcp_range": "192.168.42.2,192.168.42.20",
                 "log_file": "/var/log/dnsmasq.log",
                 "cache_duration": 300,
-                "state_file": "data/wifi_state.json",
+                "state_file": "/data/wifi_state.json",
                 "startup_cleanup": {
                     "enabled": True,
                     "connections_to_delete": ["resin-wifi", "balena-wifi-01"]
