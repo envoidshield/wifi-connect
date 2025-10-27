@@ -41,6 +41,7 @@ class Config:
                 "log_file": "/var/log/dnsmasq.log",
                 "cache_duration": 300,
                 "state_file": "/data/wifi_state.json",
+                "air_gapped": False,
                 "startup_cleanup": {
                     "enabled": True,
                     "connections_to_delete": ["resin-wifi", "balena-wifi-01"]
@@ -87,6 +88,7 @@ class Config:
             "WIFI_RESCAN_DELAY": ("wifi", "rescan_delay"),
             "WIFI_HOTSPOT_DISABLE_DELAY": ("wifi", "hotspot_disable_delay"),
             "WIFI_STARTUP_CHECK": ("wifi", "startup_check"),
+            "WIFI_AIR_GAPPED": ("wifi", "air_gapped"),
             "WIFI_GATEWAY": ("wifi", "gateway"),
             "WIFI_DHCP_RANGE": ("wifi", "dhcp_range"),
             "WIFI_LOG_FILE": ("wifi", "log_file"),
@@ -116,7 +118,7 @@ class Config:
                         current[key] = int(value)
                     except ValueError:
                         print(f"Warning: Invalid integer value for {env_var}: {value}")
-                elif key in ["enabled", "startup_check"]:
+                elif key in ["enabled", "startup_check", "air_gapped"]:
                     current[key] = value.lower() in ["true", "1", "yes", "on"]
                 elif key in ["origins", "connections_to_delete"]:
                     current[key] = [item.strip() for item in value.split(",")]

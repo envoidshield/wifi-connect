@@ -8,7 +8,8 @@
     "hotspot_name_prefix": "MyDevice",
     "hotspot_password": "securepass123",
     "scan_timeout": 45,
-    "rescan_delay": 3
+    "rescan_delay": 3,
+    "air_gapped": false
   },
   "cors": {
     "enabled": true,

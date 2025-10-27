@@ -530,6 +530,18 @@ async def startup_wifi_check():
         # Set startup flag to prevent cache clearing during startup
         startup_wifi_check._startup_in_progress = True
         
+        # Check if system is configured for air-gapped mode
+        if check_air_gapped_mode():
+            logger.info("Air-gapped mode detected, running wipe_networks.py to disable all networks")
+            wipe_success = await run_wipe_networks()
+            if wipe_success:
+                logger.info("All networks disabled successfully for air-gapped mode")
+                # Save disconnected state for air-gapped mode
+                save_wifi_state("disconnected")
+                return
+            else:
+                logger.error("Failed to disable networks for air-gapped mode, continuing with normal startup")
+        
         # Ensure all existing connections have autoconnect=no
         ensure_all_connections_autoconnect_no()
         
@@ -794,6 +806,34 @@ def clear_wifi_state() -> None:
             logger.info("Cleared WiFi state file")
     except Exception as e:
         logger.error(f"Failed to clear WiFi state: {e}")
+
+def check_air_gapped_mode() -> bool:
+    """Check if the system is configured for air-gapped mode"""
+    try:
+        air_gapped = config.get("wifi.air_gapped", False)
+        logger.info(f"Air-gapped mode check: {air_gapped}")
+        return air_gapped
+    except Exception as e:
+        logger.error(f"Error checking air-gapped mode: {e}")
+        return False
+
+async def run_wipe_networks() -> bool:
+    """Run the wipe_networks.py script to disable all networks"""
+    try:
+        logger.info("Running wipe_networks.py to disable all networks...")
+        
+        # Import the wipe_networks module and run its main function
+        import wipe_networks
+        
+        # Run the main function from wipe_networks
+        wipe_networks.main()
+        
+        logger.info("wipe_networks.py completed successfully")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error running wipe_networks.py: {e}")
+        return False
 
 def create_dnsmasq_config() -> bool:
     """Create dnsmasq configuration file for WiFi Direct mode"""
