@@ -129,6 +129,19 @@ The API server runs on the configured host and port (default: localhost:8000)
   }
   ```
 
+### 9. Get WiFi Password Status
+- **URL**: `/get-wifi-password`
+- **Method**: GET
+- **Description**: Get current WiFi hotspot password status
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "message": "Password status retrieved successfully",
+    "password_set": true
+  }
+  ```
+
 ## POST Endpoints
 
 ### 1. Set WiFi Direct Mode
@@ -239,6 +252,37 @@ The API server runs on the configured host and port (default: localhost:8000)
 - **Features**:
   - Automatically starts WiFi Connect mode after forgetting all networks
   - Reports count of successfully forgotten networks
+
+### 6. Set WiFi Password
+- **URL**: `/set-wifi-password`
+- **Method**: POST
+- **Description**: Set or unset the WiFi hotspot password
+- **Request Body**:
+  ```json
+  {
+    "password": "newpassword123"
+  }
+  ```
+  OR (to remove password):
+  ```json
+  {
+    "password": null
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "message": "WiFi password set successfully",
+    "password_set": true
+  }
+  ```
+- **Features**:
+  - Updates configuration file with new password
+  - Reloads configuration automatically
+  - Restarts active hotspot with new password
+  - Supports both WiFi Connect and WiFi Direct modes
+  - Can remove password by setting to null
 
 ## Error Responses
 

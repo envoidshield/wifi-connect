@@ -12,7 +12,7 @@ from pathlib import Path
 class Config:
     """Minimal configuration class for WiFi API Server"""
     
-    def __init__(self, config_file: str = "wifi_config.json"):
+    def __init__(self, config_file: str = "/data/wifi_config.json"):
         self.config_file = Path(config_file)
         self._config = self._load_config()
     

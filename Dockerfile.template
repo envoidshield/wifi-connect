@@ -30,6 +30,7 @@ COPY wifi-connect/ui/public/static/logo.png ui/public/static/logo.png
 COPY wifi-connect/newindex.html index.html
 COPY wifi-connect/scripts/block-peers.sh .
 COPY wifi-connect/wifi_config.json .
+COPY wifi-connect/data/wifi_config.json /data/wifi_config.json
 RUN chmod +x start.sh block-peers.sh sleep.sh
 
 # Run the API server

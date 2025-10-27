@@ -158,6 +158,14 @@ class ScanStatusResponse(BaseModel):
     can_scan: bool
     warning_message: Optional[str] = None
 
+class WiFiPasswordRequest(BaseModel):
+    password: Optional[str] = None
+
+class WiFiPasswordResponse(BaseModel):
+    success: bool
+    message: str
+    password_set: bool
+
 # Global cached WiFi interface - initialized at startup for efficiency
 _cached_wifi_interface: Optional[str] = None
 
@@ -1321,6 +1329,42 @@ async def get_connection_status(connection_type: str) -> dict:
             "message": f"Error checking {connection_type} status"
         }
 
+async def restart_hotspot(connection_type: str) -> bool:
+    """
+    Restart a hotspot connection (disable then enable)
+    
+    Args:
+        connection_type: "direct" or "connect"
+    
+    Returns:
+        bool: True if restart was successful, False otherwise
+    """
+    try:
+        mode_name = "WiFi Direct" if connection_type == "direct" else "WiFi Connect"
+        logger.info(f"Restarting {mode_name} hotspot with new password")
+        
+        # Disable the hotspot
+        disable_result = await manage_wifi_connection(connection_type, False)
+        if not disable_result["success"]:
+            logger.warning(f"Failed to disable {mode_name} hotspot: {disable_result['message']}")
+            return False
+        
+        # Wait for hotspot to fully stop
+        time.sleep(2)
+        
+        # Enable the hotspot
+        enable_result = await manage_wifi_connection(connection_type, True)
+        if not enable_result["success"]:
+            logger.warning(f"Failed to restart {mode_name} hotspot: {enable_result['message']}")
+            return False
+        
+        logger.info(f"Successfully restarted {mode_name} hotspot")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error restarting {connection_type} hotspot: {e}")
+        return False
+
 @app.get("/list-networks")
 async def list_networks(use_cache: bool = True, force_scan: bool = False):
     """List available WiFi networks"""
@@ -2031,6 +2075,84 @@ async def get_scan_status():
             hotspot_type=None,
             can_scan=False,
             warning_message="Unable to determine scan status"
+        )
+
+@app.post("/set-wifi-password")
+async def set_wifi_password(request: WiFiPasswordRequest):
+    """Set or unset the WiFi hotspot password"""
+    try:
+        new_password = request.password
+        
+        # Get current password from config
+        current_password = config.get("wifi.hotspot_password", "")
+        password_set = bool(current_password)
+        
+        # Update the configuration
+        if new_password is not None:
+            # Set new password
+            config._config["wifi"]["hotspot_password"] = new_password
+            password_set = True
+            message = "WiFi password set successfully"
+        else:
+            # Unset password (remove it)
+            if "hotspot_password" in config._config["wifi"]:
+                del config._config["wifi"]["hotspot_password"]
+            password_set = False
+            message = "WiFi password removed successfully"
+        
+        # Save configuration to file
+        if not config.save_config():
+            return WiFiPasswordResponse(
+                success=False,
+                message="Failed to save configuration to file",
+                password_set=password_set
+            )
+        
+        # Reload configuration
+        config._config = config._load_config()
+        
+        # Check if any hotspot is currently active and restart it
+        direct_status = await get_connection_status("direct")
+        connect_status = await get_connection_status("connect")
+        
+        if direct_status["active"]:
+            await restart_hotspot("direct")
+        elif connect_status["active"]:
+            await restart_hotspot("connect")
+        
+        return WiFiPasswordResponse(
+            success=True,
+            message=message,
+            password_set=password_set
+        )
+        
+    except Exception as e:
+        logger.error(f"Error setting WiFi password: {e}")
+        return WiFiPasswordResponse(
+            success=False,
+            message=f"Failed to set WiFi password: {str(e)}",
+            password_set=bool(config.get("wifi.hotspot_password", ""))
+        )
+
+@app.get("/get-wifi-password")
+async def get_wifi_password():
+    """Get current WiFi hotspot password status"""
+    try:
+        current_password = config.get("wifi.hotspot_password", "")
+        password_set = bool(current_password)
+        
+        return WiFiPasswordResponse(
+            success=True,
+            message="Password status retrieved successfully",
+            password_set=password_set
+        )
+        
+    except Exception as e:
+        logger.error(f"Error getting WiFi password status: {e}")
+        return WiFiPasswordResponse(
+            success=False,
+            message=f"Failed to get WiFi password status: {str(e)}",
+            password_set=False
         )
         
 if __name__ == "__main__":
