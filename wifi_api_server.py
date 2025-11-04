@@ -542,6 +542,8 @@ async def startup_wifi_check():
         ensure_all_connections_autoconnect_no()
         
         await cleanup_startup_connections()
+
+        await list_networks(use_cache=False, force_scan=True)
         
         # Check if startup check is enabled
         if not config.get("wifi.startup_check", True):
@@ -586,28 +588,17 @@ async def startup_wifi_check():
                 except Exception as e:
                     logger.warning(f"Error restoring connection: {e}")
             
-            elif state == "direct":
-                # Restore WiFi Direct mode
-                logger.info("Restoring WiFi Direct mode")
-                direct_result = await manage_wifi_connection("direct", True)
-                if direct_result["success"]:
-                    logger.info("WiFi Direct mode restored successfully")
-                    save_wifi_state("direct")
+            elif state == "direct" or state == "connect":
+                # Restore WiFi Direct or Connect mode
+                logger.info(f"Restoring WiFi {state} mode")
+                result = await manage_wifi_connection(state, True)
+                if result["success"]:
+                    logger.info(f"WiFi {state} mode restored successfully")
+                    save_wifi_state(state)
                     return
                 else:
-                    logger.warning(f"Failed to restore WiFi Direct mode: {direct_result['message']}")
-            
-            elif state == "connect":
-                # Restore WiFi Connect mode
-                logger.info("Restoring WiFi Connect mode")
-                connect_result = await manage_wifi_connection("connect", True)
-                if connect_result["success"]:
-                    logger.info("WiFi Connect mode restored successfully")
-                    save_wifi_state("connect")
-                    return
-                else:
-                    logger.warning(f"Failed to restore WiFi Connect mode: {connect_result['message']}")
-        
+                    logger.warning(f"Failed to restore WiFi {state} mode: {result['message']}")
+                    
         # If no saved state or restoration failed, check current connection status
         try:
             connected_response = await list_connected()
@@ -622,38 +613,6 @@ async def startup_wifi_check():
             # Continue with startup check even if we can't determine connection status
         
         logger.info("No WiFi connection found, performing network scan...")
-        
-        # Use the list_networks endpoint to scan and cache networks
-        try:
-            networks_response = await list_networks(use_cache=False, force_scan=True)
-            if hasattr(networks_response, 'networks'):
-                networks = networks_response.networks
-                if networks:
-                    logger.info(f"Found {len(networks)} available networks, but none connected")
-                    
-                    # If 1 or fewer networks found, try rescanning up to 5 times
-                    max_retries = 5
-                    retry_count = 0
-                    while len(networks) <= 1 and retry_count < max_retries:
-                        retry_count += 1
-                        logger.info(f"Only {len(networks)} network(s) found, performing rescan attempt {retry_count}/{max_retries}...")
-                        time.sleep(2)  # Wait a bit before rescanning
-                        networks_response = await list_networks(use_cache=False, force_scan=True)
-                        if hasattr(networks_response, 'networks'):
-                            networks = networks_response.networks
-                            logger.info(f"After rescan attempt {retry_count}: Found {len(networks)} available networks")
-                        else:
-                            logger.warning(f"Failed to get networks on rescan attempt {retry_count}")
-                            break
-                    
-                    if retry_count >= max_retries and len(networks) <= 1:
-                        logger.warning(f"After {max_retries} rescan attempts, still only found {len(networks)} network(s)")
-                else:
-                    logger.info("No WiFi networks found in range")
-            else:
-                logger.warning("Failed to get network list from API")
-        except Exception as e:
-            logger.warning(f"Failed to scan networks via API: {e}")
         
         # Start WiFi Connect mode since no network is connected
         logger.info("Starting WiFi Connect mode for network configuration...")
@@ -2111,14 +2070,7 @@ async def set_wifi_password(request: WiFiPasswordRequest):
         # Reload configuration
         config._config = config._load_config()
         
-        # Check if any hotspot is currently active and restart it
-        direct_status = await get_connection_status("direct")
-        connect_status = await get_connection_status("connect")
-        
-        if direct_status["active"]:
-            await restart_hotspot("direct")
-        elif connect_status["active"]:
-            await restart_hotspot("connect")
+        await startup_wifi_check()
         
         return WiFiPasswordResponse(
             success=True,
