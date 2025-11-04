@@ -1087,7 +1087,6 @@ async def manage_wifi_connection(connection_type: str, enable: bool) -> dict:
                     }
             else:
                 # Connection already exists, check if password needs to be updated
-                hotspot_password = wifi_config.get("hotspot_password")
                 if hotspot_password:
                     logger.info(f"Updating existing {mode_name} connection with password protection")
                     # Update the connection with password
@@ -2047,7 +2046,7 @@ async def set_wifi_password(request: WiFiPasswordRequest):
         password_set = bool(current_password)
         
         # Update the configuration
-        if new_password is not None:
+        if new_password is not None or new_password != "":
             # Set new password
             config._config["wifi"]["hotspot_password"] = new_password
             password_set = True
