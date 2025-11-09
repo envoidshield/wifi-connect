@@ -2086,14 +2086,17 @@ async def set_wifi_password(request: WiFiPasswordRequest):
         )
 
 #restart hotspot if it is running function if direct or connect is running
-async def restart_hotspot_if_running():
+async def restart_hotspot_if_running() -> bool:
     """Restart hotspot if it is running"""
     try:
         if await get_connection_status('direct')["active"]:
             await restart_hotspot("direct")
         elif await get_connection_status('connect')["active"]:
             await restart_hotspot("connect")
+        return True
     except Exception as e:
+        logger.error(f"Error restarting hotspot: {e}")
+        return False
 
 @app.get("/get-wifi-password")
 async def get_wifi_password():
