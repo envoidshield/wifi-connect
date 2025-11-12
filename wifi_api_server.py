@@ -1662,7 +1662,7 @@ async def connect_to_network(request: ConnectRequest):
         
         # Prepare base connection command with autoconnect=no
         wifi_interface = get_wifi_interface()
-        base_connect_cmd = ["nmcli", "device", "wifi", "connect", ssid, "ifname", wifi_interface, "autoconnect", "no"]
+        base_connect_cmd = ["nmcli", "device", "wifi", "connect", ssid, "ifname", wifi_interface]
         
         if check_result["success"]:
             # Network is saved
@@ -1681,7 +1681,7 @@ async def connect_to_network(request: ConnectRequest):
             else:
                 # No password provided, just connect to existing connection
                 # First set autoconnect=no for the existing connection
-                modify_result = run_command(["nmcli", "connection", "modify", ssid, "autoconnect", "no"])
+                modify_result = run_command(base_connect_cmd)
                 if not modify_result["success"]:
                     logger.warning(f"Failed to set autoconnect=no for connection '{ssid}': {modify_result.get('error', 'Unknown error')}")
                 result = run_command(["nmcli", "connection", "up", ssid])
