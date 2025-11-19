@@ -72,11 +72,20 @@ jobs:
       - name: Compute version
         id: version
         run: |
-          TAG=$(git tag --sort=-v:refname | grep -E "^${{ inputs.device_type }}-v[0-9]+\.[0-9]+$" | head -1 || echo "${{ inputs.device_type }}-v0.0")
-          
-          CURRENT="${TAG#${{ inputs.device_type }}-v}"
-          MAJOR=$(echo "$CURRENT" | cut -d. -f1)
-          MINOR=$(echo "$CURRENT" | cut -d. -f2)
+          DEVICE="${{ inputs.device_type }}"
+
+          # get latest matching tag like device-v1.4
+          TAG=$(git tag --sort=-v:refname | grep -E "^${DEVICE}-v[0-9]+\.[0-9]+$" | head -1)
+
+          if [ -z "$TAG" ]; then
+            echo "No existing tags for $DEVICE, starting at 0.0"
+            MAJOR=0
+            MINOR=0
+          else
+            CURRENT="${TAG#${DEVICE}-v}"
+            MAJOR=$(echo "$CURRENT" | cut -d. -f1)
+            MINOR=$(echo "$CURRENT" | cut -d. -f2)
+          fi
 
           if [ "${{ inputs.bump }}" = "major" ]; then
             MAJOR=$((MAJOR + 1))
@@ -85,7 +94,7 @@ jobs:
             MINOR=$((MINOR + 1))
           fi
 
-          echo "version=${MAJOR}.${MINOR}" >> $GITHUB_OUTPUT
+          echo "version=${MAJOR}.${MINOR}" >> "$GITHUB_OUTPUT"
 
       - name: Build artifact
         run: |
