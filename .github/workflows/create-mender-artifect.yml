@@ -31,6 +31,7 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/mender-service-installer
           path: mender-installer
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download bundle
         uses: dawidd6/action-download-artifact@v3
