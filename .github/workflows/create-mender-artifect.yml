@@ -62,9 +62,6 @@ jobs:
 
       - name: Build artifact
         run: |
-          cp mender-installer/service-artifact-gen.sh .
-          chmod +x service-artifact-gen.sh
-          
           cat > install-config.txt << 'EOF'
             wifi_api_server|/usr/local/bin/wifi_api_server|executable
             ui|/app/wifi-connect/ui|folder
