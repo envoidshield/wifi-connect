@@ -30,8 +30,7 @@ jobs:
           curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
                -H "Accept: application/vnd.github.raw" \
                -o service-artifact-gen.sh \
-               https://raw.githubusercontent.com/${{ github.repository_owner }}/mender-service-installer/refs/heads/main/service-artifact-gen.sh
-
+               https://api.github.com/repos/${{ github.repository_owner }}/mender-service-installer/contents/service-artifact-gen.sh
           cat  service-artifact-gen.sh
           chmod +x service-artifact-gen.sh
 
