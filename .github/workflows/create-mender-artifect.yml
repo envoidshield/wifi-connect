@@ -1,0 +1,63 @@
+name: Build Mender Artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      device_type:
+        default: 'rugged'
+      bump:
+        type: choice
+        options: [minor, major]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download bundle
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          name: wifi_api_server_bundle
+          workflow: build.yml
+      
+      - name: Build artifact
+        run: |
+          # Extract
+          unzip wifi_api_server_bundle.zip && cd wifi_api_server_bundle
+          
+          # Get script (private repo in same org)
+          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.raw" \
+            -o service-artifact-gen.sh \
+            https://api.github.com/repos/${{ github.repository_owner }}/mender-service-installer/contents/service-artifact-gen.sh
+          chmod +x service-artifact-gen.sh
+          
+          # Create config
+          cat > install-config.txt << 'EOF'
+          wifi_api_server|/usr/local/bin/wifi_api_server|executable
+          ui|/app/wifi-connect/ui|folder
+          index.html|/app/wifi-connect/index.html|regular
+          EOF
+          
+          # Calculate version
+          TAG=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+$' | head -1 || echo "v0.0")
+          MAJOR=$(echo ${TAG#v} | cut -d. -f1)
+          MINOR=$(echo ${TAG#v} | cut -d. -f2)
+          [ "${{ inputs.bump }}" = "major" ] && MAJOR=$((MAJOR+1)) && MINOR=0 || MINOR=$((MINOR+1))
+          VERSION="v$MAJOR.$MINOR"
+          
+          # Build
+          NAME="wifi_connect-${{ inputs.device_type }}-${VERSION}"
+          ./service-artifact-gen.sh -d "${{ inputs.device_type }}" -c install-config.txt -n "$NAME" -o "${NAME}.mender"
+          
+          # Tag
+          git config user.name "github-actions" && git config user.email "github-actions@github.com"
+          git tag "v${VERSION}" && git push origin "v${VERSION}"
+          
+          echo "NAME=${NAME}" >> $GITHUB_ENV
+      
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.NAME }}.mender
+          path: wifi_api_server_bundle/${{ env.NAME }}.mender
