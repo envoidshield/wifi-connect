@@ -38,6 +38,7 @@ jobs:
           name: wifi_api_server_bundle
           workflow: build.yml
           path: .
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Compute version
         id: version
