@@ -4,60 +4,94 @@ on:
   workflow_dispatch:
     inputs:
       device_type:
+        description: 'Device type'
         default: 'rugged'
       bump:
+        description: 'Version bump'
         type: choice
-        options: [minor, major]
+        options:
+          - minor
+          - major
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    
     steps:
-      - uses: actions/checkout@v4
-      
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout mender-installer
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/mender-service-installer
+          path: mender-installer
+
       - name: Download bundle
         uses: dawidd6/action-download-artifact@v3
         with:
           name: wifi_api_server_bundle
           workflow: build.yml
-      
+          path: .
+
+      - name: Compute version
+        id: version
+        run: |
+          TAG=$(git tag --sort=-v:refname | grep -E "^${{ inputs.device_type }}-v[0-9]+\.[0-9]+$" | head -1 || echo "${{ inputs.device_type }}-v0.0")
+          
+          CURRENT="${TAG#${{ inputs.device_type }}-v}"
+          MAJOR=$(echo "$CURRENT" | cut -d. -f1)
+          MINOR=$(echo "$CURRENT" | cut -d. -f2)
+
+          if [ "${{ inputs.bump }}" = "major" ]; then
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+          else
+            MINOR=$((MINOR + 1))
+          fi
+
+          echo "version=${MAJOR}.${MINOR}" >> $GITHUB_OUTPUT
+
       - name: Build artifact
         run: |
-          # Extract
-          unzip wifi_api_server_bundle.zip && cd wifi_api_server_bundle
-          
-          # Get script (private repo in same org)
-          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.raw" \
-            -o service-artifact-gen.sh \
-            https://api.github.com/repos/${{ github.repository_owner }}/mender-service-installer/contents/service-artifact-gen.sh
+          cp mender-installer/service-artifact-gen.sh .
           chmod +x service-artifact-gen.sh
           
-          # Create config
           cat > install-config.txt << 'EOF'
-          wifi_api_server|/usr/local/bin/wifi_api_server|executable
-          ui|/app/wifi-connect/ui|folder
-          index.html|/app/wifi-connect/index.html|regular
-          EOF
+wifi_api_server|/usr/local/bin/wifi_api_server|executable
+ui|/app/wifi-connect/ui|folder
+index.html|/app/wifi-connect/index.html|regular
+EOF
           
-          # Calculate version
-          TAG=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+$' | head -1 || echo "v0.0")
-          MAJOR=$(echo ${TAG#v} | cut -d. -f1)
-          MINOR=$(echo ${TAG#v} | cut -d. -f2)
-          [ "${{ inputs.bump }}" = "major" ] && MAJOR=$((MAJOR+1)) && MINOR=0 || MINOR=$((MINOR+1))
-          VERSION="v$MAJOR.$MINOR"
+          NAME="wifi_connect-${{ inputs.device_type }}-v${{ steps.version.outputs.version }}"
           
-          # Build
-          NAME="wifi_connect-${{ inputs.device_type }}-${VERSION}"
-          ./service-artifact-gen.sh -d "${{ inputs.device_type }}" -c install-config.txt -n "$NAME" -o "${NAME}.mender"
-          
-          # Tag
-          git config user.name "github-actions" && git config user.email "github-actions@github.com"
-          git tag "v${VERSION}" && git push origin "v${VERSION}"
-          
+          ./service-artifact-gen.sh \
+            -d "${{ inputs.device_type }}" \
+            -c install-config.txt \
+            -n "$NAME" \
+            -o "${NAME}.mender"
+
           echo "NAME=${NAME}" >> $GITHUB_ENV
-      
-      - uses: actions/upload-artifact@v4
+
+      - name: Tag version
+        run: |
+          TAG="${{ inputs.device_type }}-v${{ steps.version.outputs.version }}"
+
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+          git tag "$TAG"
+          git push origin "$TAG"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ env.NAME }}.mender
-          path: wifi_api_server_bundle/${{ env.NAME }}.mender
+          path: ${{ env.NAME }}.mender
+          retention-days: 90
+
