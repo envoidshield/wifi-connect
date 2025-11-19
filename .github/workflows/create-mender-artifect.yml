@@ -31,7 +31,6 @@ jobs:
                -H "Accept: application/vnd.github.raw" \
                -o service-artifact-gen.sh \
                https://api.github.com/repos/${{ github.repository_owner }}/mender-service-installer/contents/service-artifact-gen.sh
-          cat  service-artifact-gen.sh
           chmod +x service-artifact-gen.sh
 
       - name: Download bundle
@@ -40,6 +39,11 @@ jobs:
           name: wifi_api_server_bundle
           workflow: build.yml
           path: .
+
+      - name: Extract bundle
+        run: |
+          tar -xzf wifi_api_server_bundle.tar.gz
+          ls -R .
 
       - name: Compute version
         id: version
