@@ -1,0 +1,14 @@
+[Unit]
+Description=WiFi API Server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/app/wifi-connect
+ExecStart=/usr/local/bin/wifi_api_server
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+

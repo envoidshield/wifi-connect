@@ -93,6 +93,7 @@ jobs:
           wifi_api_server|/usr/local/bin/wifi_api_server|executable
           ui|/app/wifi-connect/ui|folder
           index.html|/app/wifi-connect/index.html|regular
+          wifi_api_server.service|service|service
           EOF
           
           NAME="wifi_connect-${{ inputs.device_type }}-v${{ steps.version.outputs.version }}"
