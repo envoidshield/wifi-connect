@@ -1,0 +1,48 @@
+name: Build WiFi API Server Binary
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller fastapi uvicorn
+
+      - name: Build PyInstaller one-file binary (with FastAPI + Uvicorn)
+        run: |
+          pyinstaller \
+            --onefile wifi_api_server.py \
+            --hidden-import fastapi \
+            --hidden-import uvicorn \
+        # Output binary will be: dist/wifi_api_server
+
+      - name: Prepare release folder
+        run: |
+          mkdir release
+          cp dist/wifi_api_server release/
+          cp -r ui release/ui
+          cp newindex.html release/index.html
+
+      - name: Create tar.gz package
+        run: |
+          tar -czvf wifi_api_server_bundle.tar.gz -C release .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wifi_api_server_bundle
+          path: wifi_api_server_bundle.tar.gz
+
