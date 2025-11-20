@@ -2046,14 +2046,15 @@ async def set_wifi_password(request: WiFiPasswordRequest):
         password_set = bool(current_password)
         
         # Update the configuration
-        if new_password is not None or new_password != "":
+        if new_password is not None and new_password != "":
             # Set new password
             config.set_config_value("wifi.hotspot_password", new_password)
             password_set = True
             message = "WiFi password set successfully"
         else:
             # Unset password (remove it)
-            if config.get_connect_config()["hotspot_password"] is not None and config.get_connect_config()["hotspot_password"] is not "":
+            connect_config = config.get_connect_config()
+            if "hotspot_password" in connect_config and connect_config.get("hotspot_password"):
                 config.set_config_value("wifi.hotspot_password", "")
             password_set = False
             message = "WiFi password removed successfully"
@@ -2065,9 +2066,6 @@ async def set_wifi_password(request: WiFiPasswordRequest):
                 message="Failed to save configuration to file",
                 password_set=password_set
             )
-        
-        # Reload configuration
-        config._config = config.save_config()
         
         await restart_hotspot_if_running()
         

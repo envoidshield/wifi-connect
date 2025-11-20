@@ -191,7 +191,8 @@ class Config:
         for k in keys[:-1]:
             if k not in current:
                 current[k] = {}
-        current = current[keys[-1]]
+            current = current[k]
+        current[keys[-1]] = value
 # Global config instance
 _config_instance: Optional[Config] = None
 
