@@ -183,6 +183,15 @@ class Config:
         print("Current Configuration:")
         print(json.dumps(self._config, indent=2))
 
+    #set config value
+    def set_config_value(self, key: str, value: Any):
+        """Set a configuration value"""
+        keys = key.split('.')
+        current = self._config
+        for k in keys[:-1]:
+            if k not in current:
+                current[k] = {}
+        current = current[keys[-1]]
 # Global config instance
 _config_instance: Optional[Config] = None
 
