@@ -2067,7 +2067,7 @@ async def set_wifi_password(request: WiFiPasswordRequest):
             )
         
         # Reload configuration
-        config._config = config._load_config()
+        config._config = config.save_config()
         
         await restart_hotspot_if_running()
         
