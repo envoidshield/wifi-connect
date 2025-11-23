@@ -196,7 +196,7 @@ class Config:
 # Global config instance
 _config_instance: Optional[Config] = None
 
-def get_config(config_file: str = "wifi_config.json") -> Config:
+def get_config(config_file: str = "/data/wifi_config.json") -> Config:
     """Get global configuration instance"""
     global _config_instance
     if _config_instance is None:
