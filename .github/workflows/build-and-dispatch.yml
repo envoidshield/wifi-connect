@@ -182,6 +182,7 @@ jobs:
 
           git add VERSION
           git commit -m "chore(release): v${NEW_VERSION}" || echo "No changes to commit"
+          git push origin HEAD:${GITHUB_REF#refs/heads/} || echo "Push failed, may already be up to date"
 
           TAG="v${NEW_VERSION}"
           echo "Creating tag $TAG"
