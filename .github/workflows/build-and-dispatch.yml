@@ -1,0 +1,186 @@
+name: Build and Dispatch
+
+on:
+  workflow_dispatch:
+    inputs:
+      device_type:
+        description: "Mender device type"
+        required: true
+        default: rugged
+        type: choice
+        options: [rugged]
+      bump:
+        description: "Version bump type"
+        type: choice
+        required: true
+        options: [patch, minor, major]
+        default: patch
+        
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine next version
+        id: version
+        run: |
+          # If VERSION doesn't exist yet, start it
+          if [ ! -f VERSION ]; then
+            echo "0.1.0" > VERSION
+          fi
+
+          CURRENT="$(cat VERSION)"
+          echo "Current version: $CURRENT"
+
+          BUMP="${{ github.event.inputs.bump }}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+
+          case "$BUMP" in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "New version (not yet committed): $NEW_VERSION"
+
+          # export to other steps
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Install mender-artifact dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --assume-yes \
+              apt-transport-https \
+              ca-certificates \
+              curl \
+              gnupg \
+              jq
+          curl -fsSL https://downloads.mender.io/repos/debian/gpg | sudo tee /etc/apt/trusted.gpg.d/mender.asc
+          sudo sed -i.bak -e "\,https://downloads.mender.io/repos/workstation-tools,d" /etc/apt/sources.list
+
+          echo "deb [arch=$(dpkg --print-architecture)] https://downloads.mender.io/repos/workstation-tools ubuntu/noble/stable main" \
+            | sudo tee /etc/apt/sources.list.d/mender.list
+
+          sudo apt-get update
+          sudo apt-get install -y mender-artifact
+      
+      - name: Download installer script
+        run: |
+          curl -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
+               -H "Accept: application/vnd.github.raw" \
+               -o service-artifact-gen.sh \
+               https://api.github.com/repos/${{ github.repository_owner }}/mender-service-installer/contents/service-artifact-gen.sh
+          chmod +x service-artifact-gen.sh
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller fastapi uvicorn
+
+      - name: Build PyInstaller one-file binary (with FastAPI + Uvicorn)
+        run: |
+          pyinstaller \
+            --onefile wifi_api_server.py \
+            --hidden-import fastapi \
+            --hidden-import uvicorn \
+
+      - name: Prepare release folder
+        run: |
+          mkdir release
+          cp dist/wifi_api_server release/
+          cp wifi_api_server.service  release/
+          cp -r ui release/ui
+          cp newindex.html release/index.html
+
+      - name: Package bundle
+        id: bundle
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          BUNDLE="bundle-${VERSION}.tar.gz"
+
+          tar -czvf "$BUNDLE" release/
+          echo "bundle_name=$BUNDLE" >> $GITHUB_OUTPUT
+
+      - name: Create install-config.txt for service-artifact-gen
+        run: |
+          cat > install-config.txt << 'EOF'
+          wifi_api_server|/usr/local/bin/wifi_api_server|executable
+          ui|/app/wifi-connect/ui|folder
+          index.html|/app/wifi-connect/index.html|regular
+          EOF
+          echo "install-config.txt:"
+          cat install-config.txt
+
+      - name: Build Mender artifact
+        id: mender
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          DEVICE_TYPE="${{ github.event.inputs.device_type }}"
+
+          NAME="wifi-connect-${DEVICE_TYPE}-v${VERSION}"
+          ARTIFACT="${NAME}.mender"
+
+          echo "Building Mender artifact: $ARTIFACT"
+
+          ./service-artifact-gen.sh \
+            -d "$DEVICE_TYPE" \
+            -c install-config.txt \
+            -n "$NAME" \
+            -o "$ARTIFACT"
+
+          ls -lh "$ARTIFACT"
+
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "artifact=$ARTIFACT" >> "$GITHUB_OUTPUT"
+
+      - name: Upload app bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.bundle.outputs.bundle_name }}
+          path: ${{ steps.bundle.outputs.bundle_name }}
+          retention-days: 30
+
+      - name: Upload Mender artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.mender.outputs.artifact }}
+          path: ${{ steps.mender.outputs.artifact }}
+          retention-days: 90
+
+      - name: Commit VERSION and tag
+        if: github.ref == 'refs/heads/main'
+        run: |
+          NEW_VERSION="${{ steps.version.outputs.version }}"
+
+          echo "$NEW_VERSION" > VERSION
+
+          git config user.name  "github-actions"
+          git config user.email "github-actions@github.com"
+
+          git add VERSION
+          git commit -m "chore(release): v${NEW_VERSION}" || echo "No changes to commit"
+
+          TAG="v${NEW_VERSION}"
+          echo "Creating tag $TAG"
+
+          git tag "$TAG" || echo "Tag already exists, skipping"
+          git push origin HEAD:${GITHUB_REF#refs/heads/}
+          git push origin "$TAG"
