@@ -121,7 +121,7 @@ jobs:
 
       - name: Create install-config.txt for service-artifact-gen
         run: |
-          cd release
+          cp release/wifi_api_server .
           cat > install-config.txt << 'EOF'
           wifi_api_server|/usr/local/bin/wifi_api_server|executable
           ui|/app/wifi-connect/ui|folder
@@ -133,7 +133,6 @@ jobs:
       - name: Build Mender artifact
         id: mender
         run: |
-          cd release
           VERSION="${{ steps.version.outputs.version }}"
           DEVICE_TYPE="${{ github.event.inputs.device_type }}"
 
