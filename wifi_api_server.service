@@ -4,6 +4,8 @@ After=network.target
 
 [Service]
 Type=simple
+# APP_DIR environment variable should be set via systemd Environment directive
+# Example: Environment="APP_DIR=/custom/path"
 WorkingDirectory=/app/wifi-connect
 ExecStart=/usr/local/bin/wifi_api_server
 Restart=always

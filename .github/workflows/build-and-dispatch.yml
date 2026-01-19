@@ -110,6 +110,7 @@ jobs:
         run: |
           mkdir release
           cp dist/wifi_api_server release/
+          cp wifi_service.service release/wifi_api_server.service
           cp wifi_api_server.service  release/
           cp -r ui release/ui
           cp newindex.html release/index.html
@@ -130,6 +131,7 @@ jobs:
           wifi_api_server|/usr/local/bin/wifi_api_server|executable
           ui|/app/wifi-connect/ui|folder
           index.html|/app/wifi-connect/index.html|regular
+          wifi_api_server.service|service|service
           EOF
           echo "install-config.txt:"
           cat install-config.txt
