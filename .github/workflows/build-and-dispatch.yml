@@ -110,7 +110,6 @@ jobs:
         run: |
           mkdir release
           cp dist/wifi_api_server release/
-          cp wifi_service.service release/wifi_api_server.service
           cp wifi_api_server.service  release/
           cp -r ui release/ui
           cp newindex.html release/index.html
@@ -120,6 +119,7 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           BUNDLE="bundle-${VERSION}.tar.gz"
+          ls -R release/
 
           tar -czvf "$BUNDLE" release/
           echo "bundle_name=$BUNDLE" >> $GITHUB_OUTPUT
