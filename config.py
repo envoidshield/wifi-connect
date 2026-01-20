@@ -22,7 +22,7 @@ class Config:
         default_config = {
             "server": {
                 "host": "0.0.0.0",
-                "port": 8080,
+                "port": 8000,
                 "log_level": "info"
             },
             "cors": {

@@ -97,22 +97,18 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller fastapi uvicorn
+          pip install -r requirements.txt
+          pip install pyinstaller 
 
-      - name: Build PyInstaller one-file binary (with FastAPI + Uvicorn)
+      - name: Build PyInstaller binary
         run: |
-          pyinstaller \
-            --onefile wifi_api_server.py \
-            --hidden-import fastapi \
-            --hidden-import uvicorn \
+          pyinstaller wifi_api_server.spec
 
       - name: Prepare release folder
         run: |
           mkdir release
           cp dist/wifi_api_server release/
           cp wifi_api_server.service  release/
-          cp -r ui release/ui
-          cp newindex.html release/index.html
 
       - name: Package bundle
         id: bundle
@@ -129,8 +125,6 @@ jobs:
           cp release/wifi_api_server .
           cat > install-config.txt << 'EOF'
           wifi_api_server|/usr/local/bin/wifi_api_server|executable
-          ui|/app/wifi-connect/ui|folder
-          index.html|/app/wifi-connect/index.html|regular
           wifi_api_server.service|service|service
           EOF
           echo "install-config.txt:"

@@ -18,6 +18,12 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import uvicorn
 from config import get_config
+import sys
+
+def resource_path(path: str) -> str:
+    if hasattr(sys, "_MEIPASS"):
+        return os.path.join(sys._MEIPASS, path)
+    return os.path.join(os.path.abspath("."), path)
 
 # Get configuration
 config = get_config()
@@ -50,7 +56,13 @@ if cors_config["enabled"]:
     )
 
 # Mount static files
-app.mount("/ui", StaticFiles(directory="ui"), name="ui")
+ui_path = resource_path("ui")
+
+app.mount(
+    "/ui",
+    StaticFiles(directory=ui_path),
+    name="ui"
+)
 
 # Startup event
 @app.on_event("startup")
@@ -972,13 +984,12 @@ def parse_frequency_band(channel_str: str) -> str:
             return f"Channel {channel}"
     except (ValueError, AttributeError):
         return "unknown"
-
+index_path = resource_path("index.html")
 # API Endpoints
-
 @app.get("/")
 async def serve_index():
     """Serve the main index.html file"""
-    return FileResponse("index.html")
+    return FileResponse(index_path)
 
 @app.get("/health")
 async def health_check():

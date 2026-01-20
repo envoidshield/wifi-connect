@@ -21,7 +21,6 @@ COPY wifi-connect/start.sh .
 COPY wifi-connect/wifi_api_server.py .
 COPY wifi-connect/config.py .
 COPY wifi-connect/config_util.py .
-COPY wifi-connect/test_api.py .
 COPY wifi-connect/sleep.sh .
 COPY wifi-connect/ui/public/static/js/keyboard.js ui/public/static/js/keyboard.js
 COPY wifi-connect/ui/public/static/js/kioskboard-aio.min.js ui/public/static/js/kioskboard-aio.min.js
@@ -29,8 +28,7 @@ COPY wifi-connect/ui/public/static/logo.png ui/public/static/logo.png
 
 COPY wifi-connect/newindex.html index.html
 COPY wifi-connect/scripts/block-peers.sh .
-COPY wifi-connect/wifi_config.json .
-COPY wifi-connect/data/wifi_config.json /data/wifi_config.json
+COPY wifi-connect/wifi_config.json /data/wifi_config.json
 RUN chmod +x start.sh block-peers.sh sleep.sh
 
 # Run the API server

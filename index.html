@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WiFi Manager</title>
+    <link rel="stylesheet" href="./ui/public/static/css/all.min.css">
     <style>
         * {
             margin: 0;
@@ -13,180 +14,366 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 50%, #7f8c8d 100%);
             min-height: 100vh;
-            padding: 20px;
+            color: #333;
+            padding: 10px;
         }
 
         .container {
             max-width: 800px;
             margin: 0 auto;
             background: white;
-            border-radius: 16px;
+            border-radius: 15px;
             box-shadow: 0 20px 40px rgba(0,0,0,0.1);
             overflow: hidden;
         }
 
         .header {
-            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 50%, #4a5f7a 100%);
             color: white;
-            padding: 30px;
+            padding: 1.5rem;
             text-align: center;
         }
 
         .header h1 {
             font-size: 2rem;
-            margin-bottom: 10px;
+            margin-bottom: 0.5rem;
+            font-weight: 300;
         }
 
-        .status-bar {
+        .header p {
+            opacity: 0.9;
+            font-size: 1rem
+        }
+
+        .additional-section {
+            padding: 1.5rem;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
             display: flex;
-            justify-content: space-between;
+            justify-content: center;
             align-items: center;
-            padding: 20px 30px;
-            background: #f8fafc;
-            border-bottom: 1px solid #e2e8f0;
         }
 
-        .wifi-direct-toggle {
+        /* WiFi Direct Toggle Button */
+        #wifi-direct-toggle {
             display: flex;
             align-items: center;
-            gap: 15px;
-        }
-
-        .toggle-switch {
-            position: relative;
-            width: 60px;
-            height: 30px;
-            background: #cbd5e1;
-            border-radius: 15px;
+            gap: 0.75rem;
+            padding: 0.875rem 1.5rem;
+            background: linear-gradient(135deg, #34495e 0%, #2c3e50 100%);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            font-size: 0.9rem;
+            font-weight: 600;
             cursor: pointer;
             transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(44, 62, 80, 0.2);
+            min-height: 48px;
+            position: relative;
+            overflow: hidden;
         }
 
-        .toggle-switch.active {
-            background: #10b981;
+        #wifi-direct-toggle:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(44, 62, 80, 0.3);
         }
 
+        #wifi-direct-toggle:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 8px rgba(44, 62, 80, 0.3);
+        }
+
+        /* Toggle Switch Container */
+        .toggle-switch {
+            position: relative;
+            width: 54px;
+            height: 28px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 14px;
+            transition: all 0.3s ease;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+
+        /* Toggle Switch Slider */
         .toggle-slider {
             position: absolute;
-            top: 3px;
-            left: 3px;
-            width: 24px;
-            height: 24px;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
             background: white;
             border-radius: 50%;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
 
-        .toggle-switch.active .toggle-slider {
-            transform: translateX(30px);
+        /* Active State */
+        #wifi-direct-toggle.active .toggle-switch {
+            background: rgba(76, 175, 80, 0.3);
+            border-color: rgba(76, 175, 80, 0.6);
+        }
+
+        #wifi-direct-toggle.active .toggle-slider {
+            transform: translateX(26px);
+            background: #4CAF50;
+            box-shadow: 0 2px 8px rgba(76, 175, 80, 0.4);
+        }
+
+        /* Status Text */
+        .status-text {
+            font-weight: 500;
+            font-size: 0.85rem;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #e74c3c;
+            transition: all 0.3s ease;
+            animation: pulse-red 2s infinite;
+        }
+
+        #wifi-direct-toggle.active .status-indicator {
+            background: #4CAF50;
+            animation: pulse-green 2s infinite;
+        }
+
+        /* Pulse animations */
+        @keyframes pulse-red {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        @keyframes pulse-green {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        /* WiFi Direct Active Message Styles */
+        .wifi-direct-active-message {
+            padding: 2rem;
+            background: linear-gradient(135deg, #e8f5e8 0%, #f0f8f0 100%);
+            border-top: 1px solid #dee2e6;
+            border-bottom: 1px solid #dee2e6;
+            text-align: center;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        .wifi-direct-content {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        .wifi-direct-icon {
+            margin-bottom: 1.5rem;
+        }
+
+        .wifi-direct-icon i {
+            font-size: 4rem;
+            color: #4CAF50;
+            animation: pulse 2s infinite;
+        }
+
+        .wifi-direct-active-message h3 {
+            font-size: 1.5rem;
+            color: #2c3e50;
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+
+        .wifi-direct-active-message p {
+            font-size: 1rem;
+            color: #6c757d;
+            margin-bottom: 2rem;
+            line-height: 1.5;
+        }
+
+        .wifi-direct-info {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .info-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1.5rem;
+            background: white;
+            border-radius: 25px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            font-size: 0.9rem;
+            color: #495057;
+            min-width: 280px;
+            justify-content: flex-start;
+        }
+
+        .info-item i {
+            color: #4CAF50;
+            font-size: 1.1rem;
+            width: 20px;
+            text-align: center;
         }
 
         .server-status {
             display: flex;
             align-items: center;
-            gap: 8px;
-            font-size: 0.9rem;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+            color: #6c757d;
+            margin-top: 0.5rem;
         }
 
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: #10b981;
+        .server-status i {
+            font-size: 0.75rem;
+            color: #28a745;
         }
 
-        .status-dot.offline {
-            background: #ef4444;
+        .server-status.offline i {
+            color: #dc3545;
+        }
+
+        .server-status.offline {
+            color: #dc3545;
+        }
+
+        /* Animations */
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            50% {
+                transform: scale(1.05);
+                opacity: 0.8;
+            }
         }
 
         .tabs {
             display: flex;
-            background: #f1f5f9;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
         }
 
         .tab {
             flex: 1;
-            padding: 15px 20px;
+            min-width: 120px;
+            padding: 1rem;
             background: none;
             border: none;
             cursor: pointer;
-            font-size: 1rem;
-            color: #64748b;
+            font-size: 0.9rem;
+            color: #6c757d;
             transition: all 0.3s ease;
+            position: relative;
+            white-space: nowrap;
+            text-align: center;
+        }
+
+        .tab:hover {
+            background: #e9ecef;
+            color: #495057;
         }
 
         .tab.active {
             background: white;
-            color: #4f46e5;
-            border-bottom: 3px solid #4f46e5;
+            color: #2c3e50;
         }
 
-        .tab:hover {
-            background: #e2e8f0;
-        }
-
-        .tab.active:hover {
-            background: white;
+        .tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: #2c3e50;
         }
 
         .tab-content {
-            display: none;
-            padding: 30px;
+            display: none !important;
+            padding: 1rem;
         }
 
         .tab-content.active {
-            display: block;
+            display: block !important;
         }
 
         .controls {
             display: flex;
-            gap: 15px;
-            margin-bottom: 20px;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
             flex-wrap: wrap;
         }
 
         .btn {
-            background: #4f46e5;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            transition: all 0.3s ease;
-            display: flex;
+            display: inline-flex;
             align-items: center;
-            gap: 8px;
+            gap: 0.5rem;
+            padding: 0.75rem 1rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            flex: 1;
+            justify-content: center;
+            min-height: 44px;
         }
 
-        .btn:hover {
-            background: #4338ca;
+        .btn-primary {
+            background: #2c3e50;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #34495e;
             transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(44,62,80,0.3);
         }
 
-        .btn:disabled {
-            background: #94a3b8;
-            cursor: not-allowed;
-            transform: none;
+        .btn-danger {
+            background: #95a5a6;
+            color: white;
         }
 
-        .btn.btn-danger {
-            background: #ef4444;
+        .btn-danger:hover {
+            background: #7f8c8d;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(149,165,166,0.3);
         }
 
-        .btn.btn-danger:hover {
-            background: #dc2626;
+        .btn-success {
+            background: #4a5f7a;
+            color: white;
         }
 
-        .btn.btn-success {
-            background: #10b981;
-        }
-
-        .btn.btn-success:hover {
-            background: #059669;
+        .btn-success:hover {
+            background: #5d6d7e;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(74,95,122,0.3);
         }
 
         .network-list {
@@ -194,59 +381,117 @@
         }
 
         .network-item {
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 15px;
-            cursor: pointer;
-            transition: all 0.3s ease;
             display: flex;
-            justify-content: space-between;
-            align-items: center;
+            flex-direction: column;
+            gap: 1rem;
+            padding: 1.25rem;
+            margin-bottom: 0.75rem;
+            background: #f8f9fa;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border: 2px solid transparent;
         }
 
         .network-item:hover {
-            background: #f1f5f9;
-            border-color: #cbd5e1;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            background: #e9ecef;
+            border-color: #2c3e50;
         }
 
-        .network-info h3 {
-            color: #1e293b;
-            margin-bottom: 5px;
+        .network-item.connected {
+            background: #d6dbdf;
+            border-color: #34495e;
+        }
+
+        .network-info {
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+        }
+
+        .network-name {
+            font-weight: 600;
             font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
         }
 
         .network-details {
-            color: #64748b;
             font-size: 0.9rem;
+            color: #6c757d;
+            line-height: 1.4;
         }
 
         .network-actions {
             display: flex;
-            gap: 10px;
+            gap: 0.75rem;
+            align-items: center;
+            flex-wrap: wrap;
         }
 
-        .security-badge {
-            display: inline-block;
-            padding: 4px 8px;
-            border-radius: 6px;
+        .network-actions .btn {
+            flex: 1;
+            min-width: 100px;
+        }
+
+        .badge {
+            padding: 0.4rem 0.75rem;
+            border-radius: 16px;
             font-size: 0.75rem;
-            font-weight: 600;
-            margin-left: 10px;
+            font-weight: 500;
+            white-space: nowrap;
         }
 
-        .security-badge.secure {
-            background: #dcfce7;
-            color: #166534;
+        .badge-success {
+            background: #d6dbdf;
+            color: #2c3e50;
         }
 
-        .security-badge.open {
-            background: #fef3c7;
-            color: #92400e;
+        .badge-warning {
+            background: #bdc3c7;
+            color: #34495e;
         }
+
+        .badge-info {
+            background: #aab7b8;
+            color: #2c3e50;
+        }
+
+        /* Signal bars styling */
+        .signal-bars {
+            display: inline-flex;
+            align-items: flex-end;
+            gap: 2px;
+            height: 16px;
+            margin-left: 4px;
+        }
+
+        .signal-bar {
+            width: 3px;
+            background: #28a745;
+            border-radius: 1px;
+            transition: all 0.2s ease;
+        }
+
+        .signal-bar:nth-child(1) { height: 4px; }
+        .signal-bar:nth-child(2) { height: 6px; }
+        .signal-bar:nth-child(3) { height: 8px; }
+        .signal-bar:nth-child(4) { height: 10px; }
+        .signal-bar:nth-child(5) { height: 12px; }
+
+        .signal-bar.inactive {
+            background: #dee2e6 !important;
+        }
+
+        /* Signal strength color coding - only apply to active bars */
+        .signal-excellent .signal-bar:not(.inactive) { background: #28a745; }
+        .signal-good .signal-bar:not(.inactive) { background: #17a2b8; }
+        .signal-fair .signal-bar:not(.inactive) { background: #ffc107; }
+        .signal-weak .signal-bar:not(.inactive) { background: #fd7e14; }
+        .signal-very-weak .signal-bar:not(.inactive) { background: #dc3545; }
 
         .modal {
             display: none;
@@ -257,30 +502,34 @@
             height: 100%;
             background: rgba(0,0,0,0.5);
             z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
         }
 
         .modal-content {
             background: white;
-            border-radius: 16px;
-            padding: 30px;
-            width: 90%;
-            max-width: 500px;
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
+            border-radius: 15px;
+            padding: 1.5rem;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            max-height: 90vh;
+            overflow-y: auto;
         }
 
         .modal-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #dee2e6;
         }
 
         .modal-title {
-            color: #1e293b;
-            font-size: 1.5rem;
+            font-size: 1.1rem;
+            font-weight: 600;
         }
 
         .close {
@@ -288,54 +537,81 @@
             border: none;
             font-size: 1.5rem;
             cursor: pointer;
-            color: #64748b;
+            color: #6c757d;
+            padding: 0.5rem;
+            margin: -0.5rem;
+            min-height: 44px;
+            min-width: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 1.25rem;
         }
 
         .form-group label {
             display: block;
-            margin-bottom: 8px;
-            color: #374151;
+            margin-bottom: 0.5rem;
             font-weight: 500;
+            font-size: 0.9rem;
         }
 
         .form-control {
             width: 100%;
-            padding: 12px;
-            border: 2px solid #e5e7eb;
+            padding: 1rem;
+            border: 2px solid #ced4da;
             border-radius: 8px;
             font-size: 1rem;
             transition: border-color 0.3s ease;
+            -webkit-appearance: none;
+            appearance: none;
         }
 
         .form-control:focus {
             outline: none;
-            border-color: #4f46e5;
+            border-color: #2c3e50;
+            box-shadow: 0 0 0 3px rgba(44,62,80,0.1);
         }
 
         .form-actions {
             display: flex;
-            gap: 15px;
+            gap: 1rem;
             justify-content: flex-end;
+            margin-top: 2rem;
+        }
+
+        .form-actions .btn {
+            flex: 1;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: #6c757d;
+        }
+
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            color: #dee2e6;
         }
 
         .loading {
-            text-align: center;
-            padding: 40px;
-            color: #64748b;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
         }
 
         .spinner {
             width: 40px;
             height: 40px;
-            border: 4px solid #e2e8f0;
-            border-top: 4px solid #4f46e5;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #2c3e50;
             border-radius: 50%;
             animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
         }
 
         @keyframes spin {
@@ -343,100 +619,313 @@
             100% { transform: rotate(360deg); }
         }
 
-        .empty-state {
-            text-align: center;
-            padding: 40px;
-            color: #64748b;
-        }
-
-        .empty-state i {
-            font-size: 3rem;
-            margin-bottom: 15px;
-            opacity: 0.5;
-        }
-
         .toast {
             position: fixed;
             bottom: 20px;
+            left: 20px;
             right: 20px;
-            background: #1f2937;
-            color: white;
-            padding: 15px 20px;
+            padding: 1rem 1.5rem;
             border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            z-index: 2000;
             transform: translateY(100px);
-            opacity: 0;
-            transition: all 0.3s ease;
-            z-index: 1001;
+            transition: transform 0.3s ease;
+            text-align: center;
         }
 
         .toast.show {
             transform: translateY(0);
-            opacity: 1;
-        }
-
-        .toast.error {
-            background: #ef4444;
         }
 
         .toast.success {
-            background: #10b981;
+            background: #2d5016;
         }
 
-        .wifi-direct-message {
-            padding: 40px 30px;
-            text-align: center;
-            background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
-            color: white;
+        .toast.error {
+            background: #722f37;
         }
 
-        .wifi-direct-message h2 {
-            margin-bottom: 15px;
-            font-size: 1.5rem;
-        }
-
-        .wifi-direct-message p {
-            opacity: 0.9;
-            font-size: 1.1rem;
-        }
-
+        /* Mobile responsiveness */
         @media (max-width: 768px) {
+            body {
+                padding: 5px;
+            }
+            
             .container {
-                margin: 10px;
+                border-radius: 12px;
+                margin: 0;
+            }
+            
+            .header {
+                padding: 1.25rem 1rem;
+            }
+            
+            .header h1 {
+                font-size: 1.75rem;
+            }
+            
+            .additional-section {
+                padding: 1rem;
+            }
+            
+            #wifi-direct-toggle {
+                padding: 0.75rem 1.25rem;
+                font-size: 0.85rem;
+                gap: 0.5rem;
+                min-height: 44px;
+            }
+            
+            .toggle-switch {
+                width: 48px;
+                height: 24px;
                 border-radius: 12px;
             }
-
-            .header {
-                padding: 20px;
+            
+            .toggle-slider {
+                width: 18px;
+                height: 18px;
+                top: 1px;
+                left: 1px;
+            }
+            
+            #wifi-direct-toggle.active .toggle-slider {
+                transform: translateX(22px);
+            }
+            
+            .wifi-direct-active-message {
+                padding: 1.5rem 1rem;
+            }
+            
+            .wifi-direct-icon i {
+                font-size: 3rem;
+            }
+            
+            .wifi-direct-active-message h3 {
+                font-size: 1.25rem;
+            }
+            
+            .wifi-direct-active-message p {
+                font-size: 0.9rem;
+                margin-bottom: 1.5rem;
+            }
+            
+            .info-item {
+                padding: 0.625rem 1rem;
+                font-size: 0.85rem;
+                min-width: auto;
+                width: 100%;
+                max-width: 300px;
+            }
+            
+            .tab {
+                padding: 0.875rem 0.5rem;
+                font-size: 0.85rem;
+            }
+            
+            .tab-content {
+                padding: 1rem;
+            }
+            
+            .controls {
+                gap: 0.5rem;
+                margin-bottom: 1rem;
+            }
+            
+            .btn {
+                padding: 0.875rem 0.75rem;
+                font-size: 0.8rem;
+                min-height: 48px;
+            }
+            
+            .network-item {
+                padding: 1rem;
+                margin-bottom: 0.5rem;
+                border-radius: 10px;
+            }
+            
+            .network-name {
+                font-size: 1rem;
+            }
+            
+            .network-details {
+                font-size: 0.85rem;
+            }
+            
+            .network-actions {
+                gap: 0.5rem;
+            }
+            
+            .network-actions .btn {
+                min-width: 80px;
+                padding: 0.5rem 0.75rem;
+                font-size: 0.8rem;
+            }
+            
+            .modal-content {
+                padding: 1.25rem;
+                border-radius: 12px;
+            }
+            
+            .form-control {
+                padding: 0.875rem;
+                font-size: 16px;
+            }
+            
+            .toast {
+                bottom: 10px;
+                left: 10px;
+                right: 10px;
+                font-size: 0.9rem;
             }
 
+            /* Mobile signal bars */
+            .signal-bars {
+                height: 14px;
+                gap: 1px;
+            }
+
+            .signal-bar {
+                width: 2px;
+            }
+
+            .signal-bar:nth-child(1) { height: 3px; }
+            .signal-bar:nth-child(2) { height: 5px; }
+            .signal-bar:nth-child(3) { height: 7px; }
+            .signal-bar:nth-child(4) { height: 9px; }
+            .signal-bar:nth-child(5) { height: 11px; }
+        }
+
+        @media (max-width: 480px) {
+            #wifi-direct-toggle {
+                padding: 0.625rem 1rem;
+                font-size: 0.8rem;
+                gap: 0.375rem;
+                flex-wrap: wrap;
+                justify-content: center;
+                text-align: center;
+            }
+            
+            .toggle-switch {
+                width: 44px;
+                height: 22px;
+                border-radius: 11px;
+            }
+            
+            .toggle-slider {
+                width: 16px;
+                height: 16px;
+                top: 1px;
+                left: 1px;
+            }
+            
+            #wifi-direct-toggle.active .toggle-slider {
+                transform: translateX(20px);
+            }
+            
+            .wifi-direct-active-message {
+                padding: 1.25rem 0.75rem;
+            }
+            
+            .wifi-direct-icon i {
+                font-size: 2.5rem;
+            }
+            
+            .wifi-direct-active-message h3 {
+                font-size: 1.1rem;
+                margin-bottom: 0.75rem;
+            }
+            
+            .wifi-direct-active-message p {
+                font-size: 0.85rem;
+                margin-bottom: 1.25rem;
+            }
+            
+            .wifi-direct-info {
+                gap: 0.75rem;
+            }
+            
+            .info-item {
+                padding: 0.5rem 0.75rem;
+                font-size: 0.8rem;
+                flex-direction: column;
+                text-align: center;
+                gap: 0.5rem;
+            }
+            
+            .info-item i {
+                font-size: 1.25rem;
+            }
+            
             .header h1 {
                 font-size: 1.5rem;
             }
-
-            .status-bar {
-                padding: 15px 20px;
-                flex-direction: column;
-                gap: 15px;
+            
+            .header p {
+                font-size: 0.9rem;
             }
-
-            .tab-content {
-                padding: 20px;
+            
+            .tab {
+                min-width: 100px;
+                padding: 0.75rem 0.25rem;
+                font-size: 0.8rem;
             }
-
-            .network-item {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 15px;
-            }
-
+            
             .network-actions {
-                width: 100%;
-                justify-content: center;
+                flex-direction: column;
             }
+            
+            .network-actions .btn {
+                width: 100%;
+                min-width: auto;
+            }
+            
+            .form-actions {
+                flex-direction: column-reverse;
+            }
+            
+            .form-actions .btn {
+                width: 100%;
+            }
+        }
 
-            .modal-content {
-                margin: 20px;
-                width: calc(100% - 40px);
+        /* Touch improvements */
+        @media (hover: none) and (pointer: coarse) {
+            .network-item:hover {
+                background: #f8f9fa;
+                border-color: transparent;
+            }
+            
+            .network-item:active {
+                background: #e9ecef;
+                border-color: #2c3e50;
+                transform: scale(0.98);
+            }
+            
+            .btn:hover {
+                transform: none;
+                box-shadow: none;
+            }
+            
+            .btn:active {
+                transform: scale(0.95);
+            }
+        }
+
+        /* Reduce motion for accessibility */
+        @media (prefers-reduced-motion: reduce) {
+            .btn, .network-item, .modal, .toast, .wifi-direct-active-message {
+                transition: none;
+                animation: none;
+            }
+            
+            .spinner {
+                animation: none;
+                border-top-color: transparent;
+            }
+            
+            .wifi-direct-icon i {
+                animation: none;
             }
         }
     </style>
@@ -444,83 +933,80 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>WiFi Manager</h1>
-            <p>Manage your wireless connections</p>
-        </div>
-
-        <div class="status-bar">
-            <div class="wifi-direct-toggle">
-                <span>WiFi Direct Mode</span>
-                <div class="toggle-switch" id="wifi-direct-toggle" onclick="toggleWiFiDirect()">
-                    <div class="toggle-slider"></div>
-                </div>
-                <span id="wifi-direct-status">OFF</span>
-            </div>
-            <div class="server-status">
-                <div class="status-dot" id="status-dot"></div>
+          <img src="./ui/public/static/logo.png" alt="logo"  width="170px" height="170px" >
+            <p>Connect to available WiFi networks</p>
+            <div class="server-status" id="server-status">
+                <i class="fas fa-circle"></i>
                 <span id="server-status-text">Online</span>
             </div>
         </div>
 
-        <div id="wifi-direct-message" class="wifi-direct-message" style="display: none;">
-            <h2>WiFi Direct Mode Active</h2>
-            <p>Device is in WiFi Direct mode. Network scanning and connection features are disabled.</p>
+        <div class="additional-section">
+            <button id="wifi-direct-toggle" class="btn" onclick="toggleWiFiDirect()">
+                <span class="status-indicator"></span>
+                <span class="status-text">WIFI DIRECT</span>
+                <div class="toggle-switch">
+                    <div class="toggle-slider"></div>
+                </div>
+                <span id="wifi-direct-status">OFF</span>
+            </button>
         </div>
-
         <div id="main-section">
             <div class="tabs">
-                <button class="tab active" onclick="showTab('available')">Available Networks</button>
-                <button class="tab" onclick="showTab('connected')">Connected</button>
-                <button class="tab" onclick="showTab('saved')">Saved Networks</button>
+                <button class="tab active" onclick="showTab('available')">
+                    <i class="fas fa-search"></i> Available
+                </button>
+                <button class="tab" onclick="showTab('connected')">
+                    <i class="fas fa-link"></i> Connected
+                </button>
+                <button class="tab" onclick="showTab('saved')">
+                    <i class="fas fa-bookmark"></i> Saved
+                </button>
             </div>
 
             <!-- Available Networks Tab -->
             <div id="available" class="tab-content active">
                 <div class="controls">
-                    <button class="btn" onclick="refreshNetworks()">
-                        <span>🔄</span> Scan Networks (Fresh)
+                    <button class="btn btn-primary" onclick="refreshNetworks()">
+                        <i class="fas fa-sync-alt"></i> Scan Networks
                     </button>
                 </div>
                 <ul class="network-list" id="available-networks">
                     <div class="loading">
                         <div class="spinner"></div>
-                        <p>Loading networks...</p>
                     </div>
                 </ul>
             </div>
-
-            <!-- Connected Network Tab -->
-            <div id="connected" class="tab-content">
-                <div class="controls">
-                    <button class="btn" onclick="refreshConnected()">
-                        <span>🔄</span> Refresh
-                    </button>
-                </div>
-                <div id="connected-network">
-                    <div class="loading">
-                        <div class="spinner"></div>
-                        <p>Loading connection status...</p>
-                    </div>
+        </div>
+        <!-- Connected Network Tab -->
+        <div id="connected" class="tab-content">
+            <div class="controls">
+                <button class="btn btn-primary" onclick="refreshConnected()">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+            </div>
+            <div id="connected-network">
+                <div class="loading">
+                    <div class="spinner"></div>
                 </div>
             </div>
+        </div>
 
-            <!-- Saved Networks Tab -->
-            <div id="saved" class="tab-content">
-                <div class="controls">
-                    <button class="btn" onclick="refreshSaved()">
-                        <span>🔄</span> Refresh
-                    </button>
-                    <button class="btn btn-danger" onclick="forgetAllNetworks()">
-                        <span>🗑️</span> Forget All
-                    </button>
-                </div>
-                <ul class="network-list" id="saved-networks">
-                    <div class="loading">
-                        <div class="spinner"></div>
-                        <p>Loading saved networks...</p>
-                    </div>
-                </ul>
+        <!-- Saved Networks Tab -->
+        <div id="saved" class="tab-content">
+            <div class="controls">
+                <button class="btn btn-primary" onclick="refreshSaved()">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+                <button class="btn btn-danger" onclick="forgetAllNetworks()">
+                    <i class="fas fa-trash"></i> Forget All
+                </button>
             </div>
+            <ul class="network-list" id="saved-networks">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </ul>
         </div>
     </div>
 
@@ -538,7 +1024,11 @@
                 </div>
                 <div class="form-group" id="password-group">
                     <label>Password:</label>
-                    <input type="password" id="connect-password" class="form-control" placeholder="Enter network password">
+                    <input type="password" id="connect-password" 
+                    class="form-control js-kioskboard-input"
+                    data-kioskboard-type="all"
+                    data-kioskboard-specialcharacters="true"
+                    placeholder="Enter network password">
                 </div>
                 <div class="form-actions">
                     <button type="button" class="btn" onclick="closeModal()">Cancel</button>
@@ -552,87 +1042,72 @@
     <div class="toast" id="toast"></div>
 
     <script>
-        // Global state
-        let wifiDirectMode = false;
-        let serverOnline = true;
+        // Configuration
+        const API_BASE = '';
         let currentTab = 'available';
+        let useCache = true;
+        let wifiDirect = false;
+        let serverOnline = true; // Track server status
+        let pendingRequests = new Set(); // Track pending requests
 
-        // Get the base URL for API calls
-        function getApiBase() {
-            // Get the current pathname and remove any trailing slash
-            let path = window.location.pathname.replace(/\/$/, '');
-            
-            // If we're at the root, return empty string
-            if (path === '' || path === '/') {
-                return '';
-            }
-            
-            // Otherwise return the path (e.g., '/connect')
-            return path;
-        }
-
-        // Helper function to make API calls with correct base URL
-        async function apiCall(endpoint, options = {}) {
-            const baseUrl = getApiBase();
-            const url = `${baseUrl}${endpoint}`;
-            return fetch(url, options);
-        }
-
-        // Initialize app
-        document.addEventListener('DOMContentLoaded', function() {
-            checkServerStatus();
-            fetchWiFiDirectStatus();
-            showTab('available');
-            
-            // Load cached networks immediately
-            loadCachedNetworks();
-            
-            // Check server status periodically
-            setInterval(checkServerStatus, 5000);
-        });
-
-        // Server status check
-        async function checkServerStatus() {
+        // Server connectivity check
+        async function checkServerConnectivity() {
             try {
-                const response = await apiCall('/health', { 
+                const response = await fetch('health', { 
                     method: 'GET',
-                    signal: AbortSignal.timeout(3000)
+                    signal: AbortSignal.timeout(30000) // 30 second timeout
                 });
-                
                 if (response.ok) {
                     if (!serverOnline) {
+                        console.log('Server is back online');
                         serverOnline = true;
-                        updateServerStatus(true);
-                        showToast('Server is back online', 'success');
+                        updateServerStatusIndicator(true);
                     }
-                } else {
-                    throw new Error('Server unavailable');
+                    return true;
                 }
             } catch (error) {
                 if (serverOnline) {
+                    console.log('Server is busy/restarting');
                     serverOnline = false;
-                    updateServerStatus(false);
-                    showToast('Server is offline', 'error');
+                    updateServerStatusIndicator(false);
                 }
+                return false;
             }
+            return false;
         }
 
-        // Update server status indicator
-        function updateServerStatus(online) {
-            const dot = document.getElementById('status-dot');
-            const text = document.getElementById('server-status-text');
+        // Enhanced fetch with server status handling
+        async function safeFetch(url, options = {}) {
+            const requestId = Math.random().toString(36);
+            pendingRequests.add(requestId);
             
-            if (online) {
-                dot.classList.remove('offline');
-                text.textContent = 'Online';
-            } else {
-                dot.classList.add('offline');
-                text.textContent = 'Offline';
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    signal: AbortSignal.timeout(30000) // 30 second timeout
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                return response;
+            } catch (error) {
+                console.error(`Request failed (${requestId}):`, error);
+                throw error;
+            } finally {
+                pendingRequests.delete(requestId);
             }
         }
 
-        // Show toast notification
-        function showToast(message, type = 'success') {
+        // Enhanced showToast that respects server status
+        function showToast(message, type = 'success', force = false) {
+            // Don't show toast if server is offline and this isn't a forced message
+            if (!serverOnline && !force) {
+                console.log('Suppressing toast due to server offline:', message);
+                return;
+            }
+            
             const toast = document.getElementById('toast');
             toast.textContent = message;
             toast.className = `toast ${type}`;
@@ -643,28 +1118,101 @@
             }, 3000);
         }
 
-        // Tab management
-        function showTab(tabName) {
-            if (wifiDirectMode) return; // Don't change tabs in WiFi Direct mode
+        // Centralized error handling function
+        function handleError(error, context, fallbackMessage) {
+            console.error(`Error in ${context}:`, error);
+            if (!serverOnline) {
+                showToast('Server is busy, please wait...', 'error', true);
+            } else {
+                showToast(fallbackMessage, 'error', true);
+            }
+        }
+
+        // Centralized error response handling
+        function handleErrorResponse(response, container, context) {
+            if (response && typeof response === 'object' && response.error) {
+                const errorType = response.error;
+                const errorMessage = response.message || 'An error occurred';
+                
+                switch (errorType) {
+                    case 'battery_low':
+                        showErrorState(container, 'battery-quarter', 'Battery is low. Please charge the device.', true, 'Battery is low. Please charge the device.');
+                        break;
+                    case 'scan_failed':
+                        showErrorState(container, 'exclamation-triangle', 'Failed to scan networks. Please try again.', true, 'Failed to scan networks');
+                        break;
+                    default:
+                        showErrorState(container, 'exclamation-triangle', errorMessage, true, errorMessage);
+                }
+                return true; // Indicates error was handled
+            }
+            return false; // No error to handle
+        }
+
+        // Helper function to show error UI state
+        function showErrorState(container, icon, message, showToast = true, toastMessage = null) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-${icon}"></i>
+                    <p>${message}</p>
+                </div>
+            `;
+            if (showToast) {
+                const toastMsg = toastMessage || (serverOnline ? message : 'Server is busy, please wait...');
+                showToast(toastMsg, 'error', true);
+            }
+        }
+
+        // Update server status indicator
+        function updateServerStatusIndicator(isOnline) {
+            const statusElement = document.getElementById('server-status');
+            const statusText = document.getElementById('server-status-text');
+            
+            if (isOnline) {
+                statusElement.classList.remove('offline');
+                statusText.textContent = 'Online';
+            } else {
+                statusElement.classList.add('offline');
+                statusText.textContent = 'Offline';
+            }
+        }
+
+        // Initialize app
+        document.addEventListener('DOMContentLoaded', function() {
+            fetchWiFiDirectStatus();
+            showTab(currentTab);           
+            //setInterval(checkServerConnectivity, 5000); // Check every 5 seconds
+        });
+
+        async function showTab(tabName) {
+            // Don't change tabs if WiFi Direct is active
+            if (wifiDirect) {
+                return;
+            }
             
             // Update tab buttons
             document.querySelectorAll('.tab').forEach(tab => {
                 tab.classList.remove('active');
             });
-            event.target.classList.add('active');
             
+            // Find the clicked tab button and make it active
+            const clickedTab = document.querySelector(`[onclick="showTab('${tabName}')"]`);
+            if (clickedTab) {
+                clickedTab.classList.add('active');
+            }
+
             // Update tab content
             document.querySelectorAll('.tab-content').forEach(content => {
                 content.classList.remove('active');
             });
             document.getElementById(tabName).classList.add('active');
-            
+
             currentTab = tabName;
-            
             // Load content based on tab
             switch(tabName) {
                 case 'available':
-                    loadCachedNetworks();
+                    useCache = true;
+                    refreshNetworks();
                     break;
                 case 'connected':
                     refreshConnected();
@@ -675,260 +1223,231 @@
             }
         }
 
-        // WiFi Direct toggle
-        async function toggleWiFiDirect() {
-            if (!serverOnline) {
-                showToast('Server is offline', 'error');
-                return;
-            }
+        async function init(){
+                    try {
+                        const response = await fetch(`./get-wifi-direct`);
+                        if (!response.ok) throw new Error('Failed to fetch WIFI_DIRECT status');    
+                        const data = await response.json();
+                        wifiDirect = data.value === true;
 
-            try {
-                const newValue = !wifiDirectMode;
-                showToast('Toggling WiFi Direct...', 'success');
-                
-                const response = await apiCall('/set-wifi-direct', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ value: newValue.toString() })
-                });
-                
-                if (!response.ok) throw new Error('Failed to toggle WiFi Direct');
-                
-                const data = await response.json();
-                wifiDirectMode = data.value;
-                updateWiFiDirectUI(wifiDirectMode);
-                
-                showToast(`WiFi Direct ${wifiDirectMode ? 'enabled' : 'disabled'}`, 'success');
-                
-                if (wifiDirectMode) {
-                    showToast('Server restarting...', 'success');
-                    setTimeout(() => {
-                        serverOnline = false;
-                        updateServerStatus(false);
-                        
-                        // Wait for server to come back
-                        const checkRestart = () => {
-                            checkServerStatus().then(() => {
-                                if (serverOnline) {
-                                    showToast('Server restarted successfully', 'success');
-                                } else {
-                                    setTimeout(checkRestart, 2000);
-                                }
-                            });
-                        };
-                        setTimeout(checkRestart, 3000);
-                    }, 1000);
+                        if (wifiDirect){
+                            document.getElementById("main-section").style.display = "none";
+                        }
+                        else{
+                            showTab(currentTab);
+                        }
+                    } catch (error) {
+                        console.error('Error fetching WiFi Direct status:', error);
+                        showToast('Error loading WiFi Direct status', 'error');
+                        // Default to showing available tab if there's an error
+                        showTab(currentTab);
+                    }
                 }
-                
-            } catch (error) {
-                console.error('Error toggling WiFi Direct:', error);
-                showToast('Error toggling WiFi Direct', 'error');
-            }
-        }
 
-        // Fetch WiFi Direct status
-        async function fetchWiFiDirectStatus() {
-            try {
-                const response = await apiCall('/get-wifi-direct');
-                if (!response.ok) throw new Error('Failed to fetch status');
-                
-                const data = await response.json();
-                wifiDirectMode = data.value === true;
-                updateWiFiDirectUI(wifiDirectMode);
-            } catch (error) {
-                console.error('Error fetching WiFi Direct status:', error);
-                showToast('Error loading WiFi Direct status', 'error');
-            }
-        }
-
-        // Update WiFi Direct UI
-        function updateWiFiDirectUI(isActive) {
-            const toggle = document.getElementById('wifi-direct-toggle');
-            const status = document.getElementById('wifi-direct-status');
-            const message = document.getElementById('wifi-direct-message');
-            const mainSection = document.getElementById('main-section');
-            
-            if (isActive) {
-                toggle.classList.add('active');
-                status.textContent = 'ON';
-                message.style.display = 'block';
-                mainSection.style.display = 'none';
-            } else {
-                toggle.classList.remove('active');
-                status.textContent = 'OFF';
-                message.style.display = 'none';
-                mainSection.style.display = 'block';
-            }
-        }
-
-        // Load cached networks (for initial page load)
-        async function loadCachedNetworks() {
-            const container = document.getElementById('available-networks');
-            
-            try {
-                const response = await apiCall('/list-networks?use_cache=true');
-                if (!response.ok) throw new Error('Failed to load cached networks');
-                
-                const data = await response.json();
-                renderAvailableNetworks(data.networks || []);
-            } catch (error) {
-                console.error('Error loading cached networks:', error);
-                // If cached networks fail, show loading spinner
-                container.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading networks...</p></div>';
-            }
-        }
-
-        // Network scanning (force refresh)
         async function refreshNetworks() {
             const container = document.getElementById('available-networks');
-            container.innerHTML = '<div class="loading"><div class="spinner"></div><p>Scanning networks...</p></div>';
+            container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
 
             try {
-                const response = await apiCall('/list-networks?use_cache=false');
-                if (!response.ok) throw new Error('Failed to scan networks');
+                let url = './list-networks';
                 
+                if (useCache) {
+                    url += '?use_cache=true';
+                    useCache = false;
+                } else {
+                    url += '?use_cache=false';
+                    showToast('Hotspot will restart', 'error', true)
+                }
+
+                const response = await safeFetch(url);
                 const data = await response.json();
                 renderAvailableNetworks(data.networks || []);
             } catch (error) {
-                console.error('Error scanning networks:', error);
-                container.innerHTML = '<div class="empty-state"><p>Error loading networks. Please try again.</p></div>';
-                showToast('Error scanning networks', 'error');
+                if (!serverOnline) {
+                    showErrorState(container, 'server', 'Server is busy. Please wait...');
+                } else {
+                    showErrorState(container, 'exclamation-triangle', 'Error loading networks. Please try again.', false);
+                    handleError(error, 'refreshNetworks', 'Error loading networks');
+                }
             }
         }
 
-        // Render available networks
+        async function refreshConnected() {
+            const container = document.getElementById('connected-network');
+            container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+            try {
+                const response = await safeFetch(`list-connected`);
+                const data = await response.json();
+                renderConnectedNetwork(data.connected);
+            } catch (error) {
+                if (!serverOnline) {
+                    showErrorState(container, 'server', 'Server is busy. Please wait...');
+                } else {
+                    showErrorState(container, 'wifi-slash', 'Error loading connection status', false);
+                    handleError(error, 'refreshConnected', 'Error loading connection status');
+                }
+            }
+        }
+
+        async function refreshSaved() {
+            const container = document.getElementById('saved-networks');
+            container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+            try {
+                const response = await safeFetch(`list-saved`);
+                const data = await response.json();
+                renderSavedNetworks(data.saved_networks || []);
+            } catch (error) {
+                if (!serverOnline) {
+                    showErrorState(container, 'server', 'Server is busy. Please wait...');
+                } else {
+                    showErrorState(container, 'bookmark', 'Error loading saved networks', false);
+                    handleError(error, 'refreshSaved', 'Error loading saved networks');
+                }
+            }
+        }
+
         function renderAvailableNetworks(networks) {
             const container = document.getElementById('available-networks');
             
-            if (networks.length === 0) {
-                container.innerHTML = '<div class="empty-state"><p>No networks found. Try scanning again.</p></div>';
+            // Handle error responses using centralized function
+            if (handleErrorResponse(networks, container, 'renderAvailableNetworks')) {
+                return;
+            }
+            
+            if (!networks || networks.length === 0) {
+                showErrorState(container, 'search', 'No networks found. Try refreshing.', false);
                 return;
             }
 
             container.innerHTML = networks.map(network => `
                 <li class="network-item" onclick="showConnectModal('${escapeHtml(network.ssid)}', '${escapeHtml(network.security)}')">
                     <div class="network-info">
-                        <h3>📶 ${escapeHtml(network.ssid)} ${network.active ? '<span style="color: #10b981;">✓ Active</span>' : ''}</h3>
+                        <div class="network-name">
+                            <i class="fas fa-wifi"></i> 
+                            <span>${escapeHtml(network.ssid)}</span>
+                            ${network.active ? '<span class="badge badge-success"><i class="fas fa-check"></i> Active</span>' : ''}
+                            <span class="badge ${getSecurityBadgeClass(network.security)}">
+                                <i class="fas fa-${getSecurityIcon(network.security)}"></i>
+                                ${getSecurityLabel(network.security)}
+                            </span>
+                        </div>
                         <div class="network-details">
-                            <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 8px;">
-                                <span style="background: #e0e7ff; color: #3730a3; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 500;">
-                                    ${escapeHtml(network.security).toUpperCase()}
+                            <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px;">
+                                <span class="badge badge-info">
+                                    <i class="fas fa-shield-alt"></i> ${escapeHtml(network.security).toUpperCase()}
                                 </span>
-                                ${network.frequency_band ? `<span style="background: #f0fdf4; color: #166534; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 500;">${escapeHtml(network.frequency_band)}</span>` : ''}
-                                ${network.signal_strength ? `<span style="background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 500;">📶 ${network.signal_strength}%</span>` : ''}
+                                ${network.frequency_band ? `<span class="badge badge-success"><i class="fas fa-broadcast-tower"></i> ${escapeHtml(network.frequency_band)}</span>` : ''}
+                                ${network.signal_strength ? `<span class="badge badge-warning"><i class="fas fa-signal"></i> ${getSignalBars(network.signal_strength)}</span>` : ''}
                             </div>
-                            ${network.bssid ? `<div style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">BSSID: ${escapeHtml(network.bssid)}</div>` : ''}
+                            ${network.bssid ? `<div style="font-size: 0.75rem; color: #6c757d; margin-top: 4px;"><i class="fas fa-fingerprint"></i> BSSID: ${escapeHtml(network.bssid)}</div>` : ''}
                         </div>
                     </div>
                 </li>
             `).join('');
         }
 
-        // Connected network status
-        async function refreshConnected() {
-            const container = document.getElementById('connected-network');
-            container.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading connection status...</p></div>';
-
-            try {
-                const response = await apiCall('/list-connected');
-                if (!response.ok) throw new Error('Failed to get connection status');
-                
-                const data = await response.json();
-                renderConnectedNetwork(data.connected);
-            } catch (error) {
-                console.error('Error getting connection status:', error);
-                container.innerHTML = '<div class="empty-state"><p>Error loading connection status</p></div>';
-                showToast('Error loading connection status', 'error');
-            }
-        }
-
-        // Render connected network
         function renderConnectedNetwork(network) {
             const container = document.getElementById('connected-network');
             
+            // Handle error responses using centralized function
+            if (handleErrorResponse(network, container, 'renderConnectedNetwork')) {
+                return;
+            }
+            
             if (!network) {
-                container.innerHTML = '<div class="empty-state"><p>📵 No network connected</p></div>';
+                showErrorState(container, 'wifi-slash', 'No network connected', false);
                 return;
             }
 
             container.innerHTML = `
-                <div class="network-item">
+                <div class="network-item connected">
                     <div class="network-info">
-                        <h3>📶 ${escapeHtml(network.ssid)} <span style="color: #10b981;">✓ Connected</span></h3>
-                        <div class="network-details">
-                            Interface: ${escapeHtml(network.interface)}<br>
-                            Security: ${escapeHtml(network.security)}
+                        <div class="network-name">
+                            <i class="fas fa-wifi"></i> 
+                            <span>${escapeHtml(network.ssid)}</span>
+                            <span class="badge badge-success"><i class="fas fa-check"></i> Connected</span>
                         </div>
+                        <div class="network-details">
+                            <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px;">
+                                <span class="badge badge-info">
+                                    <i class="fas fa-network-wired"></i> ${escapeHtml(network.interface)}
+                                </span>
+                                <span class="badge ${getSecurityBadgeClass(network.security)}">
+                                    <i class="fas fa-${getSecurityIcon(network.security)}"></i>
+                                    ${getSecurityLabel(network.security)}
+                                </span>
+                            </div>
+                            <div style="font-size: 0.9rem; color: #6c757d; line-height: 1.4;">
+                                <div><strong>Connection Name:</strong> ${escapeHtml(network.connection_name)}</div>
+                                <div><strong>Security Type:</strong> ${escapeHtml(network.security).toUpperCase()}</div>
+                                <div><strong>Interface:</strong> ${escapeHtml(network.interface)}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="network-actions">
+                        <button class="btn btn-danger" onclick="disconnectFromNetwork()">
+                            <i class="fas fa-unlink"></i> Disconnect
+                        </button>
                     </div>
                 </div>
             `;
         }
 
-        // Saved networks
-        async function refreshSaved() {
-            const container = document.getElementById('saved-networks');
-            container.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading saved networks...</p></div>';
-
-            try {
-                const response = await apiCall('/list-saved');
-                if (!response.ok) throw new Error('Failed to get saved networks');
-                
-                const data = await response.json();
-                renderSavedNetworks(data.saved_networks || []);
-            } catch (error) {
-                console.error('Error getting saved networks:', error);
-                container.innerHTML = '<div class="empty-state"><p>Error loading saved networks</p></div>';
-                showToast('Error loading saved networks', 'error');
-            }
-        }
-
-        // Render saved networks
         function renderSavedNetworks(networks) {
             const container = document.getElementById('saved-networks');
             
-            if (networks.length === 0) {
-                container.innerHTML = '<div class="empty-state"><p>📑 No saved networks found</p></div>';
+            // Handle error responses using centralized function
+            if (handleErrorResponse(networks, container, 'renderSavedNetworks')) {
+                return;
+            }
+            
+            if (!networks || networks.length === 0) {
+                showErrorState(container, 'bookmark', 'No saved networks found', false);
                 return;
             }
 
             container.innerHTML = networks.map(network => `
                 <li class="network-item">
                     <div class="network-info">
-                        <h3>📑 ${escapeHtml(network.ssid)}</h3>
-                        <div class="network-details">Security: ${escapeHtml(network.security)}</div>
+                        <div class="network-name">
+                            <i class="fas fa-bookmark"></i> ${escapeHtml(network.ssid)}
+                        </div>
+                        <div class="network-details">
+                            Security: ${escapeHtml(network.security)}
+                        </div>
                     </div>
                     <div class="network-actions">
                         <button class="btn btn-success" onclick="event.stopPropagation(); connectToSaved('${escapeHtml(network.ssid)}')">
-                            Connect
+                            <i class="fas fa-link"></i> Connect
                         </button>
-                        <button class="btn btn-danger" onclick="event.stopPropagation(); forgetNetworkByBssid('${escapeHtml(network.bssid || '')}', '${escapeHtml(network.ssid)}')">
-                            Forget
+                        <button class="btn btn-danger" onclick="event.stopPropagation(); forgetNetwork('${escapeHtml(network.ssid)}')">
+                            <i class="fas fa-trash"></i> Forget
                         </button>
                     </div>
                 </li>
             `).join('');
         }
 
-        // Connection modal
         function showConnectModal(ssid, security) {
             document.getElementById('connect-ssid').value = ssid;
             document.getElementById('connect-password').value = '';
             
             const passwordGroup = document.getElementById('password-group');
-            if (security === 'open' || security === 'none') {
+            if (security === 'none' || security === 'open' || security === '') {
                 passwordGroup.style.display = 'none';
             } else {
                 passwordGroup.style.display = 'block';
             }
             
-            document.getElementById('connect-modal').style.display = 'block';
+            document.getElementById('connect-modal').style.display = 'flex';
         }
 
         function closeModal() {
             document.getElementById('connect-modal').style.display = 'none';
         }
 
-        // Connect to network
         document.getElementById('connect-form').addEventListener('submit', async function(e) {
             e.preventDefault();
             
@@ -938,17 +1457,17 @@
             closeModal();
             
             try {
-                const response = await apiCall('/connect', {
+                const response = await safeFetch(`connect`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
                     body: JSON.stringify({
                         ssid: ssid,
                         passphrase: password || undefined
                     })
                 });
                 
-                if (!response.ok) throw new Error('Connection failed');
-                
                 const data = await response.json();
                 
                 if (data.success) {
@@ -958,21 +1477,22 @@
                     showToast(`Failed to connect to ${ssid}`, 'error');
                 }
             } catch (error) {
-                console.error('Error connecting:', error);
-                showToast(`Error connecting to ${ssid}`, 'error');
+                handleError(error, 'connect', `Error connecting to ${ssid}`);
             }
         });
 
-        // Connect to saved network
         async function connectToSaved(ssid) {
             try {
-                const response = await apiCall('/connect', {
+                const response = await safeFetch(`connect`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ssid: ssid })
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        ssid: ssid
+                        // No passphrase needed for saved networks
+                    })
                 });
-                
-                if (!response.ok) throw new Error('Connection failed');
                 
                 const data = await response.json();
                 
@@ -983,63 +1503,25 @@
                     showToast(`Failed to connect to ${ssid}`, 'error');
                 }
             } catch (error) {
-                console.error('Error connecting to saved network:', error);
-                showToast(`Error connecting to ${ssid}`, 'error');
+                handleError(error, 'connectToSaved', `Error connecting to ${ssid}`);
             }
         }
 
-        // Forget network by BSSID (with SSID fallback)
-        async function forgetNetworkByBssid(bssid, ssid) {
-            if (!bssid && !ssid) {
-                showToast('No network identifier available', 'error');
+        async function forgetNetwork(ssid) {
+            if (!confirm(`Are you sure you want to forget "${ssid}"?`)) {
                 return;
             }
             
-            const identifier = bssid || ssid;
-            const identifierType = bssid ? 'BSSID' : 'SSID';
-            const confirmMessage = bssid ? 
-                `Are you sure you want to forget network with BSSID "${bssid}"?` :
-                `Are you sure you want to forget network "${ssid}"?`;
-            
-            if (!confirm(confirmMessage)) return;
-            
             try {
-                const requestBody = bssid ? { bssid: bssid } : { ssid: ssid };
-                
-                const response = await apiCall('/forget', {
+                const response = await safeFetch(`forget-network`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(requestBody)
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        ssid: ssid
+                    })
                 });
-                
-                if (!response.ok) throw new Error('Failed to forget network');
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    showToast(`Forgot network with ${identifierType} "${identifier}"`, 'success');
-                    refreshSaved();
-                } else {
-                    showToast(`Failed to forget network with ${identifierType} "${identifier}"`, 'error');
-                }
-            } catch (error) {
-                console.error(`Error forgetting network by ${identifierType}:`, error);
-                showToast(`Error forgetting network with ${identifierType} "${identifier}"`, 'error');
-            }
-        }
-
-        // Legacy forget network function (kept for compatibility)
-        async function forgetNetwork(ssid) {
-            if (!confirm(`Are you sure you want to forget "${ssid}"?`)) return;
-            
-            try {
-                const response = await apiCall('/forget', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ssid: ssid })
-                });
-                
-                if (!response.ok) throw new Error('Failed to forget network');
                 
                 const data = await response.json();
                 
@@ -1050,23 +1532,23 @@
                     showToast(`Failed to forget "${ssid}"`, 'error');
                 }
             } catch (error) {
-                console.error('Error forgetting network:', error);
-                showToast(`Error forgetting "${ssid}"`, 'error');
+                handleError(error, 'forgetNetwork', `Error forgetting "${ssid}"`);
             }
         }
 
-        // Forget all networks
         async function forgetAllNetworks() {
-            if (!confirm('Are you sure you want to forget ALL saved networks? This cannot be undone.')) return;
+            if (!confirm('Are you sure you want to forget ALL saved networks? This cannot be undone.')) {
+                return;
+            }
             
             try {
-                const response = await apiCall('/forget-all', {
+                const response = await safeFetch(`forget-all`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
                     body: JSON.stringify({})
                 });
-                
-                if (!response.ok) throw new Error('Failed to forget all networks');
                 
                 const data = await response.json();
                 
@@ -1077,17 +1559,250 @@
                     showToast('Failed to forget all networks', 'error');
                 }
             } catch (error) {
-                console.error('Error forgetting all networks:', error);
-                showToast('Error forgetting all networks', 'error');
+                handleError(error, 'forgetAllNetworks', 'Error forgetting all networks');
             }
         }
 
-        // Utility function to escape HTML
+        async function disconnectFromNetwork() {
+            if (!confirm('Are you sure you want to disconnect from the current network?')) {
+                return;
+            }
+            
+            try {
+
+                // Use the new disconnect endpoint
+                const response = await safeFetch(`disconnect`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast('Disconnected from network', 'success');
+                    // Refresh the connected tab to show no connection
+                    setTimeout(() => refreshConnected(), 1000);
+                } else {
+                    showToast('Failed to disconnect from network', 'error');
+                }
+            } catch (error) {
+                handleError(error, 'disconnectFromNetwork', 'Error disconnecting from network');
+            }
+        }
+
+        async function toggleWiFiDirect() {
+            try {
+                const newValue = !wifiDirect;
+                
+                // Show immediate feedback that the action is being processed
+                showToast(`Toggling WiFi Direct...`, 'success', true);
+                
+                const response = await safeFetch(`set-wifi-direct`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        value: newValue.toString()
+                    })
+                });
+                
+                const data = await response.json();
+                wifiDirect = data.value == true;
+                updateWiFiDirectUI(wifiDirect);
+                
+                // Add haptic feedback for mobile devices
+                if (navigator.vibrate) {
+                    navigator.vibrate(50);
+                }
+                
+                showToast(`WiFi Direct ${wifiDirect ? 'enabled' : 'disabled'}`, 'success');
+/*                
+                // Show restart notification
+                showToast('Server restarting to apply changes...', 'success', true);
+                
+                // The server will restart, so we need to wait and reinitialize
+                setTimeout(() => {
+                    console.log('Server restarting, waiting for reconnection...');
+                    // Wait for server to come back online
+                    const checkServer = async () => {
+                        const isOnline = await checkServerConnectivity();
+                        if (isOnline) {
+                            console.log('Server is back online, reinitializing...');
+                            showToast('Server restarted successfully', 'success', true);
+                            init();
+                        } else {
+                            // Check again in 2 seconds
+                            setTimeout(checkServer, 2000);
+                        }
+                    };
+                    checkServer();
+                }, 2000);
+*/               
+            } catch (error) {
+                handleError(error, 'toggleWiFiDirect', 'Error toggling WiFi Direct');
+            }
+        }
+
+        function updateWiFiDirectUI(isWifiDirect) {
+                    const toggleButton = document.getElementById('wifi-direct-toggle');
+                    const wifiDirectStatus = document.getElementById('wifi-direct-status');
+                    const mainSection = document.getElementById('main-section');
+                    
+                    if (isWifiDirect) {
+                        // WiFi Direct is ON - hide the main section
+                        toggleButton.classList.add('active');
+                        wifiDirectStatus.textContent = 'ON';
+                        
+                        // Hide the entire main section
+                        if (mainSection) mainSection.style.display = 'none';
+                        
+                        // Show WiFi Direct message
+                        showWiFiDirectMessage();
+                        
+                    } else {
+                        // WiFi Direct is OFF - show the main section
+                        toggleButton.classList.remove('active');
+                        wifiDirectStatus.textContent = 'OFF';
+                        
+                        // IMPORTANT: Hide WiFi Direct message FIRST
+                        hideWiFiDirectMessage();
+                        
+                        // Show the main section
+                        if (mainSection) mainSection.style.display = 'block';
+                        
+                        // Reset all tab states
+                        document.querySelectorAll('.tab').forEach(tab => {
+                            tab.classList.remove('active');
+                        });
+                        
+                        // Reset all tab content - HIDE all first
+                        document.querySelectorAll('.tab-content').forEach(content => {
+                            content.classList.remove('active');
+                        });
+                        
+                        // Now properly activate ONLY the Available tab
+                        const availableTab = document.querySelector('[onclick="showTab(\'available\')"]');
+                        if (availableTab) availableTab.classList.add('active');
+                        
+                        // Show ONLY available section
+                        const availableSection = document.getElementById('available');
+                        if (availableSection) {
+                            availableSection.classList.add('active');
+                        }
+                    }
+                }
+
+
+        function hideWiFiDirectMessage() {
+            const existingMessage = document.getElementById('wifi-direct-message');
+            if (existingMessage) {
+                existingMessage.remove();
+            }
+        }
+
+        function showWiFiDirectMessage() {
+            // Remove existing message if any
+            hideWiFiDirectMessage();
+            
+            // Create WiFi Direct active message
+            const container = document.querySelector('.container');
+            const wifiDirectMessage = document.createElement('div');
+            wifiDirectMessage.id = 'wifi-direct-message';
+            wifiDirectMessage.className = 'wifi-direct-active-message';
+            wifiDirectMessage.innerHTML = `
+                <div class="wifi-direct-content">
+                    <div class="wifi-direct-icon">
+                        <i class="fas fa-broadcast-tower"></i>
+                    </div>
+                    <h3>WiFi Direct Mode Active</h3>
+                    <p>Device is in WiFi Direct mode. Network scanning and connection features are disabled.</p>
+                    <div class="wifi-direct-info">
+                        <div class="info-item">
+                            <i class="fas fa-info-circle"></i>
+                            <span>Other devices connect directly to this device</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Insert after the additional-section
+            const additionalSection = document.querySelector('.additional-section');
+            additionalSection.insertAdjacentElement('afterend', wifiDirectMessage);
+        }
+
+        async function fetchWiFiDirectStatus() {
+            try {
+                const response = await safeFetch(`get-wifi-direct`);
+                const data = await response.json();
+                wifiDirect = data.value === true;
+                updateWiFiDirectUI(wifiDirect);
+            } catch (error) {
+                console.error('Error:', error);
+                showToast('Error fetching WiFi Direct status', 'error', true);
+            }
+        }
+
         function escapeHtml(text) {
             if (!text) return '';
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        function getSecurityBadgeClass(security) {
+            if (!security || security === 'none' || security === 'open') {
+                return 'badge-warning';
+            }
+            return 'badge-info';
+        }
+
+        function getSecurityIcon(security) {
+            if (!security || security === 'none' || security === 'open') {
+                return 'unlock';
+            }
+            return 'lock';
+        }
+
+        function getSecurityLabel(security) {
+            if (!security || security === 'none' || security === 'open') {
+                return 'Open';
+            }
+            return 'Secured';
+        }
+
+        function getSignalBars(strength) {
+            if (!strength || strength < 0) return '';
+            
+            let activeBars = 0;
+            let signalClass = '';
+            
+            if (strength > 80) {
+                activeBars = 5;
+                signalClass = 'signal-excellent';
+            } else if (strength > 60) {
+                activeBars = 4;
+                signalClass = 'signal-good';
+            } else if (strength > 40) {
+                activeBars = 3;
+                signalClass = 'signal-fair';
+            } else if (strength > 20) {
+                activeBars = 2;
+                signalClass = 'signal-weak';
+            } else {
+                activeBars = 1;
+                signalClass = 'signal-very-weak';
+            }
+            
+            let bars = '';
+            for (let i = 1; i <= 5; i++) {
+                const isActive = i <= activeBars;
+                bars += `<div class="signal-bar ${isActive ? '' : 'inactive'}"></div>`;
+            }
+            
+            return `<div class="signal-bars ${signalClass}">${bars}</div>`;
         }
 
         // Close modal when clicking outside
@@ -1096,6 +1811,11 @@
                 closeModal();
             }
         });
+
+        // Prevent zoom on iOS when focusing input fields
+        document.addEventListener('touchstart', function() {}, {passive: true});
     </script>
+    <!-- kioskboard -->
+    <!-- keyboard -->
 </body>
 </html>
