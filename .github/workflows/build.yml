@@ -9,6 +9,8 @@ on:
         required: true
         options: [patch, minor, major]
         default: patch
+permissions:
+  contents: write
 
 jobs:
   build:
