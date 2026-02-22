@@ -1059,6 +1059,10 @@ class WiFiHandler(BaseHTTPRequestHandler):
                     self._set_headers(400)
                     self.wfile.write(json.dumps({"error": "Name must be 20 characters or fewer"}).encode())
                     return
+                if not all(0x20 <= ord(c) <= 0x7E for c in name):
+                    self._set_headers(400)
+                    self.wfile.write(json.dumps({"error": "Name must contain only printable ASCII characters"}).encode())
+                    return
 
                 set_wifi_direct_name(name)
 
