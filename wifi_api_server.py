@@ -2041,16 +2041,33 @@ async def set_wifi_direct_name(request: WiFiDirectNameRequest):
         except Exception as file_err:
             logger.warning(f"Could not write /data/WIFI_DIRECT_NAME: {file_err}")
 
-        # Determine which mode is currently active and restart it with the new SSID
+        # Apply the new SSID to existing nmcli connections without a full teardown.
+        # manage_wifi_connection disable only does "connection down", not "connection delete",
+        # so the connection profile persists with the old SSID. We update it directly.
+        direct_conn = config.get_direct_config().get("connection_name", "directInterface")
+        connect_conn = config.get_connect_config().get("connection_name", "connectInterface")
+
+        for conn_name, new_ssid in [
+            (direct_conn, new_direct_ssid),
+            (connect_conn, new_connect_ssid),
+        ]:
+            check = run_command(["nmcli", "connection", "show", conn_name])
+            if check["success"]:
+                run_command([
+                    "nmcli", "connection", "modify", conn_name,
+                    "802-11-wireless.ssid", new_ssid
+                ])
+
+        # Bounce whichever mode is currently active
         direct_status = await get_connection_status("direct")
         connect_status = await get_connection_status("connect")
 
         if direct_status.get("active"):
-            await manage_wifi_connection("direct", False)
-            await manage_wifi_connection("direct", True)
+            run_command(["nmcli", "connection", "down", direct_conn])
+            run_command(["nmcli", "connection", "up", direct_conn])
         elif connect_status.get("active"):
-            await manage_wifi_connection("connect", False)
-            await manage_wifi_connection("connect", True)
+            run_command(["nmcli", "connection", "down", connect_conn])
+            run_command(["nmcli", "connection", "up", connect_conn])
 
         return WiFiDirectNameResponse(
             success=True,
