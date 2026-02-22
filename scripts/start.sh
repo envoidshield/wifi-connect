@@ -79,13 +79,27 @@ WIFI_DIRECT=$(cat "$WIFI_DIRECT_FILE")
 # Set SSID based on mode
 ./block-peers.sh
 
+# Read custom WiFi Direct name prefix (default to "EnVoid")
+WIFI_DIRECT_NAME_FILE="/data/WIFI_DIRECT_NAME"
+if [ -f "$WIFI_DIRECT_NAME_FILE" ]; then
+    WIFI_NAME_PREFIX=$(cat "$WIFI_DIRECT_NAME_FILE")
+    if [ -z "$WIFI_NAME_PREFIX" ]; then
+        WIFI_NAME_PREFIX="EnVoid"
+    fi
+else
+    WIFI_NAME_PREFIX="EnVoid"
+    echo "$WIFI_NAME_PREFIX" > "$WIFI_DIRECT_NAME_FILE"
+    echo "File '$WIFI_DIRECT_NAME_FILE' created with default value '$WIFI_NAME_PREFIX'."
+fi
+echo "WiFi name prefix: $WIFI_NAME_PREFIX"
+
 if [[ -n "${WIFI_DIRECT+x}" && "${WIFI_DIRECT,,}" == "true" ]]; then
-    export PORTAL_SSID="EnVoid-Direct-${RESIN_DEVICE_UUID:0:5}" >> ~/.bashrc && source ~/.bashrc
+    export PORTAL_SSID="${WIFI_NAME_PREFIX}-Direct-${RESIN_DEVICE_UUID:0:5}" >> ~/.bashrc && source ~/.bashrc
 
     echo "WIFI_DIRECT mode: SSID set to $PORTAL_SSID" >> ~/.bashrc && source ~/.bashrc
 
 else
-    export PORTAL_SSID="EnVoid-Connect-${RESIN_DEVICE_UUID:0:5}" >> ~/.bashrc && source ~/.bashrc
+    export PORTAL_SSID="${WIFI_NAME_PREFIX}-Connect-${RESIN_DEVICE_UUID:0:5}" >> ~/.bashrc && source ~/.bashrc
 
     echo "Standard mode: SSID set to $PORTAL_SSID" >> ~/.bashrc && source ~/.bashrc
 

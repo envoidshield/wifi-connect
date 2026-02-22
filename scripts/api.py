@@ -727,6 +727,16 @@ class WiFiHandler(BaseHTTPRequestHandler):
                         self._set_headers(500)
                         self.wfile.write(json.dumps({"error": "Failed to get wifi-direct status"}).encode())
 
+        elif self.path == '/get-wifi-direct-name':
+            try:
+                name = get_wifi_direct_name()
+                self._set_headers()
+                self.wfile.write(json.dumps({"name": name}).encode())
+            except Exception as e:
+                logger.error(f"Error getting wifi-direct name: {e}")
+                self._set_headers(500)
+                self.wfile.write(json.dumps({"error": "Failed to get wifi-direct name"}).encode())
+
         elif self.path.startswith('/list-networks'):
                     logger.info("Handling list-networks request")
                     # Check if WiFi Direct is enabled
@@ -1034,6 +1044,31 @@ class WiFiHandler(BaseHTTPRequestHandler):
                 
                 threading.Thread(target=delayed_restart).start()
 
+            elif self.path == '/set-wifi-direct-name':
+                if 'name' not in data:
+                    self._set_headers(400)
+                    self.wfile.write(json.dumps({"error": "Name is required"}).encode())
+                    return
+
+                name = str(data['name']).strip()
+                if not name:
+                    self._set_headers(400)
+                    self.wfile.write(json.dumps({"error": "Name cannot be empty"}).encode())
+                    return
+                if len(name) > 20:
+                    self._set_headers(400)
+                    self.wfile.write(json.dumps({"error": "Name must be 20 characters or fewer"}).encode())
+                    return
+
+                set_wifi_direct_name(name)
+
+                self._set_headers()
+                self.wfile.write(json.dumps({
+                    "success": True,
+                    "name": name,
+                    "message": "WiFi Direct name updated. Restart required to apply changes."
+                }).encode())
+
             else:
                 self._set_headers(404)
                 self.wfile.write(json.dumps({"error": "Not found"}).encode())
@@ -1083,6 +1118,26 @@ def set_wifi_direct_value(value, file_path="/data/WIFI_DIRECT"):
         f.write(str(value).lower())
     logger.info(f"WIFI_DIRECT set to: {value}")
     print(f"WIFI_DIRECT set to: {value}")
+
+def get_wifi_direct_name(file_path="/data/WIFI_DIRECT_NAME"):
+    """Read the current WiFi Direct name prefix from file"""
+    logger.debug(f"Reading WIFI_DIRECT_NAME from {file_path}")
+    if os.path.exists(file_path):
+        with open(file_path, 'r') as f:
+            value = f.read().strip()
+            logger.debug(f"WIFI_DIRECT_NAME from file: {value}")
+            return value if value else "EnVoid"
+    else:
+        logger.debug(f"WIFI_DIRECT_NAME file not found at {file_path}, returning 'EnVoid'")
+        return "EnVoid"
+
+def set_wifi_direct_name(value, file_path="/data/WIFI_DIRECT_NAME"):
+    """Write a new WiFi Direct name prefix to file"""
+    logger.debug(f"Setting WIFI_DIRECT_NAME to '{value}' in {file_path}")
+    with open(file_path, 'w') as f:
+        f.write(str(value).strip())
+    logger.info(f"WIFI_DIRECT_NAME set to: {value}")
+    print(f"WIFI_DIRECT_NAME set to: {value}")
 
 def run_server(server_class=HTTPServer, port=8000, wifi_manager=None):
     """Start the HTTP server"""
