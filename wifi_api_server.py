@@ -2010,7 +2010,7 @@ async def get_wifi_direct_name():
 
 @app.post("/set-wifi-direct-name")
 async def set_wifi_direct_name(request: WiFiDirectNameRequest):
-    """Set the WiFi Direct name prefix"""
+    """Set the WiFi Direct name prefix and apply it to the running hotspot"""
     try:
         name = request.name.strip()
         if not name:
@@ -2020,21 +2020,42 @@ async def set_wifi_direct_name(request: WiFiDirectNameRequest):
         if not all(0x20 <= ord(c) <= 0x7E for c in name):
             raise HTTPException(status_code=400, detail="Name must contain only printable ASCII characters")
 
+        # Build the full SSID names using the device UUID suffix (same logic as config.py)
+        device_id = (os.getenv("RESIN_DEVICE_UUID", "") or "")[:5]
+        suffix = f"-{device_id}" if device_id else ""
+        new_direct_ssid = f"{name}-Direct{suffix}"
+        new_connect_ssid = f"{name}-Connect{suffix}"
+
+        # Update all relevant config keys so manage_wifi_connection uses the new SSID
         config.set_config_value("wifi.direct_name", name)
+        config.set_config_value("direct.hotspot_name", new_direct_ssid)
+        config.set_config_value("wifi.hotspot_name", new_connect_ssid)
+
         if not config.save_config():
             raise HTTPException(status_code=500, detail="Failed to save configuration")
 
-        # Also persist to /data/WIFI_DIRECT_NAME for start.sh to pick up on restart
+        # Persist prefix for start.sh to pick up on next service restart
         try:
             with open("/data/WIFI_DIRECT_NAME", "w") as f:
                 f.write(name)
         except Exception as file_err:
             logger.warning(f"Could not write /data/WIFI_DIRECT_NAME: {file_err}")
 
+        # Determine which mode is currently active and restart it with the new SSID
+        direct_status = await get_connection_status("direct")
+        connect_status = await get_connection_status("connect")
+
+        if direct_status.get("active"):
+            await manage_wifi_connection("direct", False)
+            await manage_wifi_connection("direct", True)
+        elif connect_status.get("active"):
+            await manage_wifi_connection("connect", False)
+            await manage_wifi_connection("connect", True)
+
         return WiFiDirectNameResponse(
             success=True,
             name=name,
-            message="WiFi Direct name updated. A service restart is required to apply changes."
+            message=f"WiFi Direct name updated. New SSID: {new_direct_ssid}"
         )
     except HTTPException:
         raise
