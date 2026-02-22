@@ -166,6 +166,14 @@ class WiFiPasswordResponse(BaseModel):
     message: str
     password_set: bool
 
+class WiFiDirectNameRequest(BaseModel):
+    name: str
+
+class WiFiDirectNameResponse(BaseModel):
+    success: bool
+    name: str
+    message: str
+
 # Global cached WiFi interface - initialized at startup for efficiency
 _cached_wifi_interface: Optional[str] = None
 
@@ -1988,6 +1996,52 @@ async def get_wifi_direct():
     except Exception as e:
         logger.error(f"Error getting WiFi Direct status: {e}")
         raise HTTPException(status_code=500, detail="Failed to get WiFi Direct status")
+
+@app.get("/get-wifi-direct-name")
+async def get_wifi_direct_name():
+    """Get the current WiFi Direct name prefix"""
+    try:
+        name = config.get("wifi.direct_name", "EnVoid")
+        return WiFiDirectNameResponse(success=True, name=name, message="Name retrieved successfully")
+    except Exception as e:
+        logger.error(f"Error getting WiFi Direct name: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get WiFi Direct name")
+
+
+@app.post("/set-wifi-direct-name")
+async def set_wifi_direct_name(request: WiFiDirectNameRequest):
+    """Set the WiFi Direct name prefix"""
+    try:
+        name = request.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Name cannot be empty")
+        if len(name) > 20:
+            raise HTTPException(status_code=400, detail="Name must be 20 characters or fewer")
+        if not all(0x20 <= ord(c) <= 0x7E for c in name):
+            raise HTTPException(status_code=400, detail="Name must contain only printable ASCII characters")
+
+        config.set_config_value("wifi.direct_name", name)
+        if not config.save_config():
+            raise HTTPException(status_code=500, detail="Failed to save configuration")
+
+        # Also persist to /data/WIFI_DIRECT_NAME for start.sh to pick up on restart
+        try:
+            with open("/data/WIFI_DIRECT_NAME", "w") as f:
+                f.write(name)
+        except Exception as file_err:
+            logger.warning(f"Could not write /data/WIFI_DIRECT_NAME: {file_err}")
+
+        return WiFiDirectNameResponse(
+            success=True,
+            name=name,
+            message="WiFi Direct name updated. A service restart is required to apply changes."
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error setting WiFi Direct name: {e}")
+        raise HTTPException(status_code=500, detail="Failed to set WiFi Direct name")
+
 
 @app.get("/get-wifi-connect")
 async def get_wifi_connect():
