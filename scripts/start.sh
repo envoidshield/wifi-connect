@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-export DBUS_SYSTEM_BUS_ADDRESS=unix:path=/host/run/dbus/system_bus_socket
-
 log_with_timestamp() {
     while IFS= read -r line; do
         echo "$(date +"[%d-%m-%Y %H:%M:%S]") $line"

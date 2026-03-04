@@ -22,7 +22,7 @@ class Config:
         default_config = {
             "server": {
                 "host": "0.0.0.0",
-                "port": 8000,
+                "port": 8080,
                 "log_level": "info"
             },
             "cors": {
@@ -31,7 +31,7 @@ class Config:
             },
             "wifi": {
                 "hotspot_name": "Envoid-Connect",
-                "direct_name": "EnVoid",
+                "direct_name": "EnVoid-Direct",
                 "scan_timeout": 30,
                 "rescan_delay": 2,
                 "hotspot_disable_delay": 3,
@@ -197,14 +197,14 @@ class Config:
 # Global config instance
 _config_instance: Optional[Config] = None
 
-def get_config(config_file: str = "wifi_config.json") -> Config:
+def get_config(config_file: str = "/data/wifi_config.json") -> Config:
     """Get global configuration instance"""
     global _config_instance
     if _config_instance is None:
         _config_instance = Config(config_file)
     return _config_instance
 
-def create_default_config(config_file: str = "wifi_config.json") -> bool:
+def create_default_config(config_file: str = "/data/wifi_config.json") -> bool:
     """Create a default configuration file"""
     config = Config(config_file)
     return config.save_config()
