@@ -31,6 +31,7 @@ class Config:
             },
             "wifi": {
                 "hotspot_name": "Envoid-Connect",
+                "direct_name": "EnVoid",
                 "scan_timeout": 30,
                 "rescan_delay": 2,
                 "hotspot_disable_delay": 3,

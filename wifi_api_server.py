@@ -1002,188 +1002,132 @@ async def health_check():
         logger.error(f"Health check failed: {e}")
         raise HTTPException(status_code=503, detail="Service unavailable")
 
+def _get_connection_config(connection_type: str):
+    """Get config and display name for a connection type.
+    Returns (config_dict, mode_name) or (None, None) for invalid types."""
+    if connection_type == "direct":
+        return config.get_direct_config(), "WiFi Direct"
+    elif connection_type == "connect":
+        return config.get_connect_config(), "WiFi Connect"
+    return None, None
+
+
+def _sync_connection_profile(connection_name: str, hotspot_name: str, hotspot_password: str) -> bool:
+    """Sync SSID and password on an existing nmcli profile. Returns False if profile doesn't exist."""
+    if not run_command(["nmcli", "connection", "show", connection_name])["success"]:
+        return False
+    modify_cmd = ["nmcli", "connection", "modify", connection_name, "802-11-wireless.ssid", hotspot_name]
+    if hotspot_password:
+        modify_cmd.extend(["wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", hotspot_password])
+    run_command(modify_cmd)
+    return True
+
+
+def _create_connection_profile(connection_name: str, hotspot_name: str, hotspot_password: str,
+                               wifi_interface: str, connection_type: str) -> dict:
+    """Create a new hotspot nmcli profile with AP settings."""
+    create_cmd = [
+        "nmcli", "connection", "add", "type", "wifi",
+        "ifname", wifi_interface, "con-name", connection_name,
+        "ssid", hotspot_name
+    ]
+    if hotspot_password:
+        create_cmd.extend(["wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", hotspot_password])
+
+    result = run_command(create_cmd)
+    if not result["success"]:
+        return {"success": False, "message": f"Failed to create hotspot: {result.get('error', '')}"}
+
+    modify_cmd = [
+        "nmcli", "connection", "modify", connection_name,
+        "802-11-wireless.mode", "ap",
+        "802-11-wireless.band", "bg",
+        "ipv4.never-default", "yes",
+        "connection.autoconnect", "no",
+        "ipv4.method", "manual",
+        "ipv4.addresses", "192.168.42.1/24",
+    ]
+    if connection_type == "direct":
+        modify_cmd.extend(["802-11-wireless.powersave", "0"])
+
+    modify_result = run_command(modify_cmd)
+    if not modify_result["success"]:
+        return {"success": False, "message": f"Failed to configure hotspot: {modify_result.get('error', '')}"}
+
+    return {"success": True}
+
+
 async def manage_wifi_connection(connection_type: str, enable: bool) -> dict:
-    """
-    General function to manage WiFi connections (direct/connect mode)
-    
-    Args:
-        connection_type: "direct" or "connect"
-        enable: True to enable, False to disable
-    
-    Returns:
-        dict: {"success": bool, "message": str}
-    """
+    """Enable or disable a WiFi hotspot (direct/connect mode)."""
     try:
-        # Get appropriate config based on connection type
-        if connection_type == "direct":
-            wifi_config = config.get_direct_config()
-            mode_name = "WiFi Direct"
+        cfg, mode_name = _get_connection_config(connection_type)
+        if not cfg:
+            return {"success": False, "message": f"Invalid connection type: {connection_type}"}
 
-        elif connection_type == "connect":
-            wifi_config = config.get_connect_config()
-            mode_name = "WiFi Connect"
-
-        else:
-            return {
-                "success": False,
-                "message": f"Invalid connection type: {connection_type}"
-            }
-        hotspot_name = wifi_config["hotspot_name"]
-        connection_name = wifi_config["connection_name"]
+        connection_name = cfg["connection_name"]
+        hotspot_name = cfg["hotspot_name"]
         hotspot_password = config.get("wifi.hotspot_password", "")
         wifi_interface = get_wifi_interface()
-        
-        if not wifi_interface:
-            return {
-                "success": False,
-                "message": "No WiFi interface found"
-            }
-        
-        if enable:
-            # Enable the connection (create hotspot)
-            logger.info(f"Enabling {mode_name} mode")
-            
-            # Check if hotspot connection already exists
-            check_result = run_command(["nmcli", "connection", "show", connection_name])
-            
-            if not check_result["success"]:
-                # Connection doesn't exist, create it
-                logger.info(f"Creating new {mode_name} connection: {connection_name}")
-                
-                create_cmd = [
-                    "nmcli", "connection", "add", "type", "wifi",
-                    "ifname", wifi_interface,
-                    "con-name", connection_name,
-                    "ssid", hotspot_name
-                ]
-                
-                # Add password if configured
-                if hotspot_password:
-                    create_cmd.extend(["wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", hotspot_password])
-                    logger.info(f"Creating {mode_name} hotspot with password protection")
-                else:
-                    logger.info(f"Creating {mode_name} hotspot without password (open network)")
-                
-                result = run_command(create_cmd)
-                if not result["success"]:
-                    return {
-                        "success": False,
-                        "message": f"Failed to create {mode_name} hotspot: {result.get('error', 'Unknown error')}"
-                    }
-                
-                # Configure the hotspot settings
-                modify_cmd = [
-                    "nmcli", "connection", "modify", connection_name,
-                    "802-11-wireless.mode", "ap",
-                    "802-11-wireless.band", "bg",
-                    "ipv4.never-default", "yes",
-                    "connection.autoconnect", "no",
-                    "ipv4.method", "manual",
-                    "ipv4.addresses", "192.168.42.1/24",
-                ]
 
-                if connection_type == "direct":
-                    modify_cmd.extend([
-                         "802-11-wireless.powersave", "0",
-                    ])
-                
-                modify_result = run_command(modify_cmd)
-                if not modify_result["success"]:
-                    return {
-                        "success": False,
-                        "message": f"Failed to configure {mode_name} hotspot: {modify_result.get('error', 'Unknown error')}"
-                    }
-            else:
-                # Connection already exists, check if password needs to be updated
-                if hotspot_password:
-                    logger.info(f"Updating existing {mode_name} connection with password protection")
-                    # Update the connection with password
-                    password_cmd = [
-                        "nmcli", "connection", "modify", connection_name,
-                        "wifi-sec.key-mgmt", "wpa-psk",
-                        "wifi-sec.psk", hotspot_password
-                    ]
-                    password_result = run_command(password_cmd)
-                    if not password_result["success"]:
-                        logger.warning(f"Failed to update {mode_name} connection with password: {password_result.get('error', 'Unknown error')}")
-                else:
-                    logger.info(f"Using existing {mode_name} connection without password")
-            
-            # Enable autoconnect and start the hotspot connection
-            autoconnect_result = run_command([
-                "nmcli", "connection", "modify", connection_name, 
-                "connection.autoconnect", "yes"
-            ])
-            
+        if not wifi_interface:
+            return {"success": False, "message": "No WiFi interface found"}
+
+        if enable:
+            logger.info(f"Enabling {mode_name} mode")
+
+            if not _sync_connection_profile(connection_name, hotspot_name, hotspot_password):
+                result = _create_connection_profile(
+                    connection_name, hotspot_name, hotspot_password, wifi_interface, connection_type
+                )
+                if not result["success"]:
+                    return result
+
+            run_command(["nmcli", "connection", "modify", connection_name, "connection.autoconnect", "yes"])
             start_result = run_command(["nmcli", "connection", "up", connection_name])
             if not start_result["success"]:
-                return {
-                    "success": False,
-                    "message": f"Failed to start {mode_name} hotspot: {start_result.get('error', 'Unknown error')}"
-                }
-            logger.info(f"Stopping dnsmasq for {mode_name} mode...")
+                return {"success": False, "message": f"Failed to start {mode_name} hotspot: {start_result.get('error', '')}"}
+
             stop_dnsmasq()
             time.sleep(1)
-            logger.info(f"Starting dnsmasq for {mode_name} mode...")
-            dnsmasq_started = start_dnsmasq(wifi_interface, connection_type)
-            if not dnsmasq_started:
+            if not start_dnsmasq(wifi_interface, connection_type):
                 logger.warning("Failed to start dnsmasq, but continuing with hotspot")
-            
-            # Clear network cache when starting hotspot (but not during startup)
-            # During startup, we want to keep the cached networks for immediate frontend use
+
             if not hasattr(startup_wifi_check, '_startup_in_progress'):
                 clear_network_cache()
-            
-            # Save the new state
+
             save_wifi_state(connection_type)
-            
             logger.info(f"{mode_name} mode enabled successfully")
-            return {
-                "success": True,
-                "message": f"{mode_name} mode enabled successfully"
-            }
-            
+            return {"success": True, "message": f"{mode_name} mode enabled successfully"}
+
         else:
-            # Disable the connection
             logger.info(f"Disabling {mode_name} mode")
-            
-            # Stop dnsmasq for both WiFi Connect and Direct modes
-            logger.info(f"Stopping dnsmasq for {mode_name} mode...")
             stop_dnsmasq()
-            
-            # Disable autoconnect
-            run_command([
-                "nmcli", "connection", "modify", connection_name, 
-                "connection.autoconnect", "no"
-            ])
-            
-            # Stop the connection
+
+            run_command(["nmcli", "connection", "modify", connection_name, "connection.autoconnect", "no"])
             down_result = run_command(["nmcli", "connection", "down", connection_name])
             if not down_result["success"]:
-                return {
-                    "success": False,
-                    "message": f"Failed to stop {mode_name} hotspot: {down_result.get('error', 'Unknown error')}"
-                }
-            
-            # Clear network cache when stopping hotspot
+                return {"success": False, "message": f"Failed to stop {mode_name} hotspot: {down_result.get('error', '')}"}
+
             clear_network_cache()
             await list_networks(use_cache=False, force_scan=True)
-            
-            # Save the disconnected state
-            save_wifi_state("disconnected")
-            
+
+            # After scan, another hotspot may have auto-activated.
+            # If so, start dnsmasq for it. Otherwise save as disconnected.
+            other_type = "connect" if connection_type == "direct" else "direct"
+            other_status = await get_connection_status(other_type)
+            if other_status["active"]:
+                logger.info(f"{other_type} hotspot auto-activated after disable, starting dnsmasq")
+                start_dnsmasq(wifi_interface, other_type)
+                save_wifi_state(other_type)
+            else:
+                save_wifi_state("disconnected")
+
             logger.info(f"{mode_name} mode disabled successfully")
-            return {
-                "success": True,
-                "message": f"{mode_name} mode disabled successfully"
-            }
-            
+            return {"success": True, "message": f"{mode_name} mode disabled successfully"}
+
     except Exception as e:
         logger.error(f"Error managing {connection_type} connection: {e}")
-        return {
-            "success": False,
-            "message": f"Failed to manage {connection_type} connection: {str(e)}"
-        }
+        return {"success": False, "message": f"Failed to manage {connection_type} connection: {str(e)}"}
 
 
 @app.post("/set-wifi-direct")
@@ -1297,36 +1241,33 @@ async def get_connection_status(connection_type: str) -> dict:
 
 async def restart_hotspot(connection_type: str) -> bool:
     """
-    Restart a hotspot connection (disable then enable)
-    
-    Args:
-        connection_type: "direct" or "connect"
-    
-    Returns:
-        bool: True if restart was successful, False otherwise
+    Restart a hotspot connection with a lightweight bounce.
+    Stops dnsmasq, brings the connection down, then re-enables via
+    manage_wifi_connection which updates SSID/password from config
+    and restarts dnsmasq.
     """
     try:
         mode_name = "WiFi Direct" if connection_type == "direct" else "WiFi Connect"
-        logger.info(f"Restarting {mode_name} hotspot with new password")
-        
-        # Disable the hotspot
-        disable_result = await manage_wifi_connection(connection_type, False)
-        if not disable_result["success"]:
-            logger.warning(f"Failed to disable {mode_name} hotspot: {disable_result['message']}")
-            return False
-        
-        # Wait for hotspot to fully stop
-        time.sleep(2)
-        
-        # Enable the hotspot
+        logger.info(f"Restarting {mode_name} hotspot")
+
+        if connection_type == "direct":
+            wifi_config = config.get_direct_config()
+        else:
+            wifi_config = config.get_connect_config()
+        connection_name = wifi_config.get("connection_name", f"{connection_type}Interface")
+
+        stop_dnsmasq()
+        run_command(["nmcli", "connection", "down", connection_name])
+        time.sleep(1)
+
         enable_result = await manage_wifi_connection(connection_type, True)
         if not enable_result["success"]:
             logger.warning(f"Failed to restart {mode_name} hotspot: {enable_result['message']}")
             return False
-        
+
         logger.info(f"Successfully restarted {mode_name} hotspot")
         return True
-        
+
     except Exception as e:
         logger.error(f"Error restarting {connection_type} hotspot: {e}")
         return False
@@ -2007,7 +1948,6 @@ async def get_wifi_direct_name():
         logger.error(f"Error getting WiFi Direct name: {e}")
         raise HTTPException(status_code=500, detail="Failed to get WiFi Direct name")
 
-
 @app.post("/set-wifi-direct-name")
 async def set_wifi_direct_name(request: WiFiDirectNameRequest):
     """Set the WiFi Direct name prefix and apply it to the running hotspot"""
@@ -2034,40 +1974,7 @@ async def set_wifi_direct_name(request: WiFiDirectNameRequest):
         if not config.save_config():
             raise HTTPException(status_code=500, detail="Failed to save configuration")
 
-        # Persist prefix for start.sh to pick up on next service restart
-        try:
-            with open("/data/WIFI_DIRECT_NAME", "w") as f:
-                f.write(name)
-        except Exception as file_err:
-            logger.warning(f"Could not write /data/WIFI_DIRECT_NAME: {file_err}")
-
-        # Apply the new SSID to existing nmcli connections without a full teardown.
-        # manage_wifi_connection disable only does "connection down", not "connection delete",
-        # so the connection profile persists with the old SSID. We update it directly.
-        direct_conn = config.get_direct_config().get("connection_name", "directInterface")
-        connect_conn = config.get_connect_config().get("connection_name", "connectInterface")
-
-        for conn_name, new_ssid in [
-            (direct_conn, new_direct_ssid),
-            (connect_conn, new_connect_ssid),
-        ]:
-            check = run_command(["nmcli", "connection", "show", conn_name])
-            if check["success"]:
-                run_command([
-                    "nmcli", "connection", "modify", conn_name,
-                    "802-11-wireless.ssid", new_ssid
-                ])
-
-        # Bounce whichever mode is currently active
-        direct_status = await get_connection_status("direct")
-        connect_status = await get_connection_status("connect")
-
-        if direct_status.get("active"):
-            run_command(["nmcli", "connection", "down", direct_conn])
-            run_command(["nmcli", "connection", "up", direct_conn])
-        elif connect_status.get("active"):
-            run_command(["nmcli", "connection", "down", connect_conn])
-            run_command(["nmcli", "connection", "up", connect_conn])
+        await apply_hotspot_config()
 
         return WiFiDirectNameResponse(
             success=True,
@@ -2079,7 +1986,6 @@ async def set_wifi_direct_name(request: WiFiDirectNameRequest):
     except Exception as e:
         logger.error(f"Error setting WiFi Direct name: {e}")
         raise HTTPException(status_code=500, detail="Failed to set WiFi Direct name")
-
 
 @app.get("/get-wifi-connect")
 async def get_wifi_connect():
@@ -2159,7 +2065,7 @@ async def set_wifi_password(request: WiFiPasswordRequest):
                 password_set=password_set
             )
         
-        await restart_hotspot_if_running()
+        await apply_hotspot_config()
         
         return WiFiPasswordResponse(
             success=True,
@@ -2175,17 +2081,30 @@ async def set_wifi_password(request: WiFiPasswordRequest):
             password_set=bool(config.get("wifi.hotspot_password", ""))
         )
 
-#restart hotspot if it is running function if direct or connect is running
-async def restart_hotspot_if_running() -> bool:
-    """Restart hotspot if it is running"""
+async def apply_hotspot_config() -> bool:
+    """Sync nmcli profiles with current config and restart the active hotspot.
+    Always updates both profiles so changes apply whether running or not."""
     try:
-        if await get_connection_status('direct')["active"]:
-            await restart_hotspot("direct")
-        elif await get_connection_status('connect')["active"]:
-            await restart_hotspot("connect")
+        hotspot_password = config.get("wifi.hotspot_password", "")
+        for conn_type in ["direct", "connect"]:
+            cfg, _ = _get_connection_config(conn_type)
+            _sync_connection_profile(cfg["connection_name"], cfg["hotspot_name"], hotspot_password)
+
+        connection_type = None
+        if (await get_connection_status('direct'))["active"]:
+            connection_type = "direct"
+        elif (await get_connection_status('connect'))["active"]:
+            connection_type = "connect"
+
+        if connection_type:
+            await restart_hotspot(connection_type)
+            wifi_interface = get_wifi_interface()
+            if wifi_interface and (_dnsmasq_process is None or _dnsmasq_process.poll() is not None):
+                logger.warning("dnsmasq not running after hotspot restart, starting it")
+                start_dnsmasq(wifi_interface, connection_type)
         return True
     except Exception as e:
-        logger.error(f"Error restarting hotspot: {e}")
+        logger.error(f"Error applying hotspot config: {e}")
         return False
 
 @app.get("/get-wifi-password")
