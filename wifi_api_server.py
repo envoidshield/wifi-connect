@@ -830,6 +830,7 @@ def start_dnsmasq(wifi_interface: str, connection_type: str = "connect") -> bool
         dnsmasq_cmd = [
             "dnsmasq",
             f"--address=/#/{gateway}",
+            f"--address=/enport.local/{gateway}",
             f"--interface={wifi_interface}",
             "--keep-in-foreground",
             f"--dhcp-range={dhcp_range}",

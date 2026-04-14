@@ -14,6 +14,9 @@ pub fn start_dnsmasq(config: &Config, device: &Device) -> Result<Child> {
         args.push(format!("--address=/#/{}", config.gateway));
     }
 
+    // HTTPS UI hostname (nginx server_name enport.local) → portal gateway
+    args.push(format!("--address=/enport.local/{}", config.gateway));
+
     args.push(format!("--dhcp-range={}", config.dhcp_range));
 
     if !config.no_dhcp_gateway {
