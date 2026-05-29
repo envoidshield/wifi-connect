@@ -1019,6 +1019,13 @@ def _sync_connection_profile(connection_name: str, hotspot_name: str, hotspot_pa
     modify_cmd = ["nmcli", "connection", "modify", connection_name, "802-11-wireless.ssid", hotspot_name]
     if hotspot_password:
         modify_cmd.extend(["wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", hotspot_password])
+    else:
+        # Clear any existing security so the hotspot becomes an open network.
+        # Without this the old wpa-psk/psk stays on the profile and the hotspot
+        # restarts password-protected even after the password is removed.
+        # Empty values reset the properties so NetworkManager drops the
+        # 802-11-wireless-security setting entirely (open AP).
+        modify_cmd.extend(["wifi-sec.psk", "", "wifi-sec.key-mgmt", ""])
     run_command(modify_cmd)
     return True
 
