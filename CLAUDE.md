@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 WiFi Connect is a Rust-based utility for dynamically setting WiFi configuration on Linux devices via a captive portal. The project consists of:
 - Core Rust application that manages NetworkManager for WiFi connectivity
 - React-based UI for the captive portal (in `ui/` directory)
-- Python API server (`scripts/api.py`) for external control
+- FastAPI server (`wifi_api_server.py`) for WiFi management and external control
 - Shell scripts for deployment and management
 
 ## Development Commands
@@ -99,13 +99,8 @@ The UI is a React application using:
 ### Key Scripts
 
 - **start.sh**: Main entry script for balenaOS deployments
-  - Checks connectivity before starting WiFi Connect
-  - Manages WiFi Direct mode configuration
-  - Launches Python API server alongside main application
-
-- **api.py**: REST API server for external control
-  - Runs on port 8080
-  - Provides programmatic control over WiFi Connect
+  - Sets up DBUS and logging
+  - Launches the FastAPI server (`wifi_api_server.py`)
 
 ## Important Notes
 

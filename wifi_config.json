@@ -6,6 +6,7 @@
   },
   "wifi": {
     "hotspot_name": "Envoid-Connect",
+    "direct_name": "EnVoid",
     "scan_timeout": 30,
     "rescan_delay": 2,
     "connection_name": "connectInterface"
