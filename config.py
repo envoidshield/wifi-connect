@@ -31,6 +31,7 @@ class Config:
             },
             "wifi": {
                 "hotspot_name": "Envoid-Connect",
+                "direct_name": "EnVoid-Direct",
                 "scan_timeout": 30,
                 "rescan_delay": 2,
                 "hotspot_disable_delay": 3,
@@ -203,7 +204,7 @@ def get_config(config_file: str = "/data/wifi_config.json") -> Config:
         _config_instance = Config(config_file)
     return _config_instance
 
-def create_default_config(config_file: str = "wifi_config.json") -> bool:
+def create_default_config(config_file: str = "/data/wifi_config.json") -> bool:
     """Create a default configuration file"""
     config = Config(config_file)
     return config.save_config()

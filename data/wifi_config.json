@@ -1,4 +1,9 @@
 {
-    "wifi": {
-    }
+  "server": {
+    "port": 8080
+  },
+  "wifi": {
+  },
+  "direct": {
+  }
 }
