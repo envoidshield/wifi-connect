@@ -826,17 +826,17 @@ def start_dnsmasq(wifi_interface: str, connection_type: str = "connect") -> bool
         dhcp_range = config.get("wifi.dhcp_range", "192.168.42.2,192.168.42.20")
         log_file = config.get("wifi.log_file", "/var/log/dnsmasq.log")
         
-        # Build base dnsmasq command
+        # Build base dnsmasq command.
+        # --port=0: DHCP only (no DNS). Avoids clash with host dnsmasq on :53.
         dnsmasq_cmd = [
             "dnsmasq",
-            f"--address=/#/{gateway}",
+            "--port=0",
             f"--interface={wifi_interface}",
             "--keep-in-foreground",
             f"--dhcp-range={dhcp_range}",
             "--bind-interfaces",
             "--except-interface=lo",
             "--no-hosts",
-            "--log-queries",
             "--log-dhcp",
             f"--log-facility={log_file}"
         ]
@@ -1018,7 +1018,17 @@ def _sync_connection_profile(connection_name: str, hotspot_name: str, hotspot_pa
         return False
     modify_cmd = ["nmcli", "connection", "modify", connection_name, "802-11-wireless.ssid", hotspot_name]
     if hotspot_password:
-        modify_cmd.extend(["wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", hotspot_password])
+        # Lock to WPA2-CCMP only. Default NM APs often advertise SAE/WPA3
+        # transition; Android WifiNetworkSpecifier + setWpa2Passphrase then
+        # fails with FAILURE_NO_RESPONSE.
+        modify_cmd.extend([
+            "wifi-sec.key-mgmt", "wpa-psk",
+            "wifi-sec.psk", hotspot_password,
+            "wifi-sec.proto", "rsn",
+            "wifi-sec.pairwise", "ccmp",
+            "wifi-sec.group", "ccmp",
+            "802-11-wireless-security.pmf", "1",
+        ])
     run_command(modify_cmd)
     return True
 
@@ -1049,6 +1059,16 @@ def _create_connection_profile(connection_name: str, hotspot_name: str, hotspot_
     ]
     if connection_type == "direct":
         modify_cmd.extend(["802-11-wireless.powersave", "0"])
+
+    if hotspot_password:
+        # Lock to WPA2-CCMP only (see _sync_connection_profile).
+        modify_cmd.extend([
+            "wifi-sec.key-mgmt", "wpa-psk",
+            "wifi-sec.proto", "rsn",
+            "wifi-sec.pairwise", "ccmp",
+            "wifi-sec.group", "ccmp",
+            "802-11-wireless-security.pmf", "1",
+        ])
 
     modify_result = run_command(modify_cmd)
     if not modify_result["success"]:

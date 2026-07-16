@@ -25,7 +25,9 @@ pub fn start_dnsmasq(config: &Config, device: &Device) -> Result<Child> {
 
     args.push(format!("--interface={}", device.interface()));
 
-    // Static arguments that are always required
+    // Static arguments that are always required.
+    // --port=0: DHCP only (no DNS). Avoids clash with host dnsmasq on :53.
+    args.push("--port=0".to_string());
     args.push("--keep-in-foreground".to_string());
     args.push("--bind-interfaces".to_string());
     args.push("--except-interface=lo".to_string());
