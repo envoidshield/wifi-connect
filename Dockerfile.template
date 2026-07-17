@@ -27,8 +27,9 @@ COPY wifi-connect/ui/public/static/logo.png ui/public/static/logo.png
 
 COPY wifi-connect/newindex.html index.html
 COPY wifi-connect/scripts/block-peers.sh .
+COPY common/scripts/prepare_adb_mdns_network.sh .
 COPY wifi-connect/data/wifi_config.json /data/wifi_config.json
-RUN chmod +x start.sh block-peers.sh sleep.sh
+RUN chmod +x start.sh block-peers.sh sleep.sh prepare_adb_mdns_network.sh
 
 # Run the API server
 # CMD ["./sleep.sh"]

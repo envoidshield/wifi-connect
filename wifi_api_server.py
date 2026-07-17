@@ -234,6 +234,38 @@ def run_command(command: List[str], timeout: int = None, input: str = None) -> D
             "output": ""
         }
 
+def prepare_adb_mdns_network(wifi_interface: Optional[str] = None) -> None:
+    """Re-apply link-scoped multicast routes for ADB Openscreen mDNS.
+
+    Kernel drops these when the Wi-Fi link bounces (Direct/Connect/STA). Safe to
+    call repeatedly; does not change default routes or Docker networking.
+    """
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prepare_adb_mdns_network.sh")
+    env = os.environ.copy()
+    iface = wifi_interface or get_wifi_interface()
+    if iface:
+        env["ADB_MDNS_IFACE"] = iface
+    if not os.path.isfile(script):
+        logger.warning("prepare_adb_mdns_network.sh missing at %s", script)
+        return
+    try:
+        result = subprocess.run(
+            ["/bin/sh", script],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+            env=env,
+        )
+        out = (result.stdout or "").strip()
+        err = (result.stderr or "").strip()
+        if out:
+            logger.info(out)
+        if result.returncode != 0 and err:
+            logger.warning("prepare_adb_mdns_network failed: %s", err)
+    except Exception as e:
+        logger.warning("prepare_adb_mdns_network error: %s", e)
+
 def _detect_wifi_interface() -> Optional[str]:
     """Detect the primary WiFi interface name"""
     try:
@@ -590,6 +622,7 @@ async def startup_wifi_check():
                             connection_name=connected_network_data["connection_name"]
                         )
                         save_wifi_state("connected", connected_network)
+                        prepare_adb_mdns_network(connected_network_data.get("interface") or wifi_interface)
                         return
                     else:
                         logger.warning(f"Failed to restore connection to {connected_network_data['ssid']}: {result.get('error', 'Unknown error')}")
@@ -613,6 +646,7 @@ async def startup_wifi_check():
             if hasattr(connected_response, 'connected') and connected_response.connected:
                 logger.info(f"WiFi network already connected to {connected_response.connected.ssid}")
                 save_wifi_state("connected", connected_response.connected)
+                prepare_adb_mdns_network(getattr(connected_response.connected, "interface", None) or wifi_interface)
                 return
             else:
                 logger.info("No active WiFi connection found")
@@ -1116,6 +1150,7 @@ async def manage_wifi_connection(connection_type: str, enable: bool) -> dict:
                 clear_network_cache()
 
             save_wifi_state(connection_type)
+            prepare_adb_mdns_network(wifi_interface)
             logger.info(f"{mode_name} mode enabled successfully")
             return {"success": True, "message": f"{mode_name} mode enabled successfully"}
 
@@ -1139,6 +1174,7 @@ async def manage_wifi_connection(connection_type: str, enable: bool) -> dict:
                 logger.info(f"{other_type} hotspot auto-activated after disable, starting dnsmasq")
                 start_dnsmasq(wifi_interface, other_type)
                 save_wifi_state(other_type)
+                prepare_adb_mdns_network(wifi_interface)
             else:
                 save_wifi_state("disconnected")
 
@@ -1691,7 +1727,8 @@ async def connect_to_network(request: ConnectRequest):
                 save_wifi_state("connected", connected_response.connected)
         except Exception as e:
             logger.warning(f"Could not save connected state: {e}")
-        
+
+        prepare_adb_mdns_network(wifi_interface)
         return SuccessResponse(success=True, message=f"Connected to {ssid}")
     except Exception as e:
         logger.error(f"Error connecting to network: {e}")
