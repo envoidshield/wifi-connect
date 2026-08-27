@@ -30,6 +30,40 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+DEFAULT_HOTSPOT_PASSWORD = "envoid connect 2026 !"
+
+
+def _configured_hotspot_password() -> str:
+    return str(config.get("wifi.hotspot_password", "") or "").strip()
+
+
+def _is_hotspot_password_set() -> bool:
+    return bool(_configured_hotspot_password())
+
+
+def _resolve_default_hotspot_password() -> str:
+    env_password = os.getenv("WIFI_HOTSPOT_PASSWORD", "").strip()
+    if env_password:
+        return env_password
+    return DEFAULT_HOTSPOT_PASSWORD
+
+
+def _seed_hotspot_password_if_missing() -> bool:
+    """Write default PSK when config has no password. Returns True if config changed."""
+    if _is_hotspot_password_set():
+        return False
+
+    password = _resolve_default_hotspot_password()
+    config.set_config_value("wifi.hotspot_password", password)
+    if not config.save_config():
+        logger.error("Failed to save WiFi config after seeding default hotspot password")
+        return False
+
+    logger.warning(
+        "WiFi Direct password was unset; applied default PSK; clients must reconnect"
+    )
+    return True
+
 
 # Create FastAPI app
 app = FastAPI(
@@ -53,12 +87,41 @@ if cors_config["enabled"]:
 app.mount("/ui", StaticFiles(directory="ui"), name="ui")
 
 # Startup event
+async def _sync_configured_hotspot_profiles() -> None:
+    """Push configured PSK onto existing nmcli profiles and restart active hotspot."""
+    password = _configured_hotspot_password()
+    if not password:
+        return
+
+    for connection_type in ("direct", "connect"):
+        wifi_config = (
+            config.get_direct_config()
+            if connection_type == "direct"
+            else config.get_connect_config()
+        )
+        connection_name = wifi_config["connection_name"]
+        hotspot_name = wifi_config["hotspot_name"]
+        if not run_command(["nmcli", "connection", "show", connection_name])["success"]:
+            continue
+        run_command([
+            "nmcli", "connection", "modify", connection_name,
+            "802-11-wireless.ssid", hotspot_name,
+            "wifi-sec.key-mgmt", "wpa-psk",
+            "wifi-sec.psk", password,
+        ])
+
+    await restart_hotspot_if_running()
+
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize WiFi interface and check connectivity at startup"""
     # Initialize WiFi interface
     initialize_wifi_interface()
-    
+
+    if _seed_hotspot_password_if_missing():
+        await _sync_configured_hotspot_profiles()
+
     # Perform startup WiFi check
     await startup_wifi_check()
 
@@ -1034,6 +1097,12 @@ async def manage_wifi_connection(connection_type: str, enable: bool) -> dict:
         if enable:
             # Enable the connection (create hotspot)
             logger.info(f"Enabling {mode_name} mode")
+
+            if connection_type == "direct" and not str(hotspot_password or "").strip():
+                return {
+                    "success": False,
+                    "message": "WiFi Direct password is not configured",
+                }
             
             # Check if hotspot connection already exists
             check_result = run_command(["nmcli", "connection", "show", connection_name])
@@ -1183,6 +1252,11 @@ async def set_wifi_direct(request: WiFiDirectRequest):
     """Toggle WiFi Direct mode"""
     try:
         value = request.value.lower() == "true"
+        if value and not _is_hotspot_password_set():
+            raise HTTPException(
+                status_code=400,
+                detail="WiFi Direct password is not configured",
+            )
         result = await manage_wifi_connection("direct", value)
         
         if not result["success"]:
@@ -2037,27 +2111,20 @@ async def get_scan_status():
 
 @app.post("/set-wifi-password")
 async def set_wifi_password(request: WiFiPasswordRequest):
-    """Set or unset the WiFi hotspot password"""
+    """Set the WiFi hotspot password (open network is not supported)."""
     try:
         new_password = request.password
-        
-        # Get current password from config
-        current_password = config.get("wifi.hotspot_password", "")
-        password_set = bool(current_password)
-        
-        # Update the configuration
-        if new_password is not None and new_password != "":
-            # Set new password
-            config.set_config_value("wifi.hotspot_password", new_password)
-            password_set = True
-            message = "WiFi password set successfully"
-        else:
-            # Unset password (remove it)
-            connect_config = config.get_connect_config()
-            if "hotspot_password" in connect_config and connect_config.get("hotspot_password"):
-                config.set_config_value("wifi.hotspot_password", "")
-            password_set = False
-            message = "WiFi password removed successfully"
+
+        if new_password is None or not str(new_password).strip():
+            return WiFiPasswordResponse(
+                success=False,
+                message="Open network is not supported; password is required",
+                password_set=_is_hotspot_password_set(),
+            )
+
+        config.set_config_value("wifi.hotspot_password", str(new_password).strip())
+        password_set = True
+        message = "WiFi password set successfully"
         
         # Save configuration to file
         if not config.save_config():
@@ -2100,8 +2167,7 @@ async def restart_hotspot_if_running() -> bool:
 async def get_wifi_password():
     """Get current WiFi hotspot password status"""
     try:
-        current_password = config.get("wifi.hotspot_password", "")
-        password_set = bool(current_password)
+        password_set = _is_hotspot_password_set()
         
         return WiFiPasswordResponse(
             success=True,
@@ -2114,7 +2180,7 @@ async def get_wifi_password():
         return WiFiPasswordResponse(
             success=False,
             message=f"Failed to get WiFi password status: {str(e)}",
-            password_set=False
+            password_set=_is_hotspot_password_set()
         )
         
 if __name__ == "__main__":
